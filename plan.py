@@ -6,7 +6,6 @@ import numpy as np
 class BaseRRT(object):
     def __init__(self):
         self.root = None
-        self.vertices = []
         self.start = None
         self.goal = None
 
@@ -60,6 +59,12 @@ class BaseRRT(object):
         """
         add the new state to the tree and complement other values.
         """
+        pass
+
+    @abstractmethod
+    def cost(self, x_from, x_to):
+        # type: (BaseRRT.StateNode, BaseRRT.StateNode) -> float
+        """calculate the cost from one state to another state"""
         pass
 
     @abstractmethod
