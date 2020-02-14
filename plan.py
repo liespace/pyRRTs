@@ -17,18 +17,6 @@ class BaseRRT(object):
         """
         pass
 
-    def planning(self, times):
-        # type: (int) -> None
-        """
-        main flow.
-        """
-        for i in range(times):
-            x_new = self.sample_free(i)
-            x_nearest = self.nearest(x_new)
-            if self.collision_free(x_nearest, x_new):
-                self.attach(x_nearest, x_new)
-                self.rewire(x_new)
-
     @abstractmethod
     def sample_free(self, n):
         # type: (int) -> BaseRRT.StateNode
@@ -81,35 +69,3 @@ class BaseRRT(object):
         extract the planning result.
         """
         pass
-
-    @property
-    def trajectory(self):
-        """
-        planning velocity for a path to generate a trajectory.
-        """
-        return None
-
-    class StateNode(object):
-        def __init__(self, state=(), g=np.inf, h=np.inf, parent=None, children=None):
-            # type: (tuple, BaseRRT.StateNode, float, float, List[BaseRRT.StateNode]) -> None
-            """
-            :param state: state of the Node, a tuple (x, y, orientation).
-            :param g: cost from root to here.
-            :param h: cost from here to goal.
-            :param parent: its parent node.
-            :param children: a list of its children node.
-            """
-            self.state = np.array(state)
-            self.v, self.k = None, None  # velocity of the state, curvature of the state (related to the steering angle)
-            self.g, self.h = g, h
-            self.f = self.g + self.h
-            self.parent = parent
-            self.children = children if children else []
-            self.status = 0  # 0 for safe, 1 for dangerous.
-
-        def set_parent(self, x_parent):
-            # type: (BaseRRT.StateNode) -> None
-            """
-            add a state as parent.
-            """
-            self.parent = x_parent

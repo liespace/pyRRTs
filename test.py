@@ -60,9 +60,9 @@ def main():
                         [2.5, -(1.1-0.8)], [2.5-0.6, -1.1], [-(2.5-0.4), -1.1], [-2.5, -(1.1-1.0)]])
     contour1 = transform(contour.transpose(), goal).transpose()
     contour1 = np.floor(contour1 / 0.1 + 600 / 2.).astype(int)
-    contour2 = transform(contour.transpose(), np.array(goal) + np.array([-1.0, 1.0, 0])).transpose()
+    contour2 = transform(contour.transpose(), np.array(goal) + np.array([-2.0, 2.0, 0])).transpose()
     contour2 = np.floor(contour2 / 0.1 + 600 / 2.).astype(int)
-    contour3 = transform(contour.transpose(), np.array(start) + np.array([-1.0, 1.0, 0])).transpose()
+    contour3 = transform(contour.transpose(), np.array(start) + np.array([10.0, -10.0, 0])).transpose()
     contour3 = np.floor(contour3 / 0.1 + 600 / 2.).astype(int)
 
     mask = np.zeros_like(grid_map, dtype=np.uint8)
@@ -77,7 +77,9 @@ def main():
     # mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, np.ones((50, 50), np.uint8))
     # mask = cv2.dilate(mask, np.ones((3,3), np.uint8), iterations=1)
     mask = mask | np.bitwise_not(miss)
-    cv2.imshow("Mask", mask)
+    result = np.bitwise_and(mask, grid_map)
+    print (np.any(result==127))
+    cv2.imshow("Mask", result)
     cv2.waitKey(0)
 
 
