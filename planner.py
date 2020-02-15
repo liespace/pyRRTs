@@ -52,11 +52,11 @@ class RRTStar(object):
         self.start, self.goal = start, goal
         self.start.g = self.goal.h = 0
         self.start.h = self.goal.g = self.cost(start, goal) if self.collision_free(start, goal) else 0
-        self.root, self.vertices = self.start, [self.start]
         return self
 
     def planning(self, times):  # type: (int) -> None
         """main flow."""
+        self.root, self.vertices = self.start, [self.start]
         for i in range(times):
             x_new = self.sample_free(i)
             x_nearest = self.nearest(x_new)
@@ -164,21 +164,76 @@ class RRTStar(object):
         return reeds_shepp.path_length(x_from.state, x_to.state, 1. / self.maximum_curvature)
 
     @property
-    def path(self):
-        """extract the planning result."""
+    def path(self):  # type: () -> List[RRTStar.StateNode]
+        """extract the planning result. including the goal state if the the goal is available"""
         self.vertices.sort(key=lambda x: x.fu)
         if self.vertices[0].fu < np.inf:
-            return self.vertices[0].trace()
+            p = self.vertices[0].trace()
+            p.append(self.goal)
+            return p
         else:
             self.vertices.sort(key=lambda x: x.fl)
             return self.vertices[0].trace()
 
-    @property
-    def trajectory(self):
+    def trajectory(self, a_cc=3, v_max=20, res=0.5):
         """
         planning velocity for a path to generate a trajectory.
         """
-        return None
+        def interpolate(q_ori, segment_type, length, radius):
+            x0, y0, a0 = q_ori[0], q_ori[1], q_ori[2]
+            transfer = np.array([[np.cos(a0), -np.sin(a0), 0., x0], [np.sin(a0), np.cos(a0), 0., y0], [0., 0., 1., a0]])
+            sign, phi = np.sign(length), np.fabs(length)/radius
+            if segment_type == 1:
+                r = 2 * radius * np.sin(phi / 2.)
+                x_lcs = np.array([[r*sign*np.cos(phi/2.)], [r*np.sin(phi/2.)], [sign*phi], [1]])
+            elif segment_type == 3:
+                r = 2 * radius * np.sin(phi / 2.)
+                x_lcs = np.array([[r * sign * np.cos(phi / 2.)], [- r * np.sin(phi / 2.)], [- sign*phi], [1]])
+            else:
+                x_lcs = np.array([[length], [0], [0], [1]])
+            x_tar = np.dot(transfer, x_lcs)
+            return x_tar[0, 0], x_tar[1, 0], x_tar[2, 0]
+
+        def extract_segments(q_from, q_to):
+            segments.extend(reeds_shepp.path_type(q_from, q_to, 1. / self.maximum_curvature))
+            return q_to
+
+        def extract_discontinuities(q0, sgs):
+            sg0, sg1 = sgs[0], sgs[1]
+            q1 = interpolate(q0, sg0[0], sg0[1], 1. / self.maximum_curvature)
+            if sg0[1] * sg1[1] < 0:
+                discontinuities.append(self.Configuration(q1, v=0))
+            return q1
+
+        def plan_motions(sector):
+            q0, v0, q1, v1 = sector[0].state, sector[0].v, sector[1].state, sector[1].v
+            extent = reeds_shepp.path_length(q0, q1, 1./self.maximum_curvature)
+            acc = min([(v_max**2 - v1**2) / extent, a_cc])
+            vcc = np.sqrt(v1**2 + acc * extent)
+            samples = reeds_shepp.path_sample(q0, q1, 1./self.maximum_curvature, res)
+            for i, sample in enumerate(samples):
+                if i * res < extent/2.:
+                    vt = min([np.sqrt(v0**2 + 2*acc*(i*res)), vcc])
+                else:
+                    vt = min([np.sqrt(v1**2 + 2*acc*(extent - i*res)), vcc])
+                motions.append(self.Configuration(sample[:3], k=sample[3], v=vt))
+
+        segments = []  # type: List[(float, float)]
+        path = [tuple(node.state) for node in self.path]
+        reduce(extract_segments, path)
+        segments = zip(segments[:-1], segments[1:])  # type: List[(Tuple[float], Tuple[float])]
+
+        discontinuities = []  # type: List[(Tuple[float], float)]
+        segments.insert(0, tuple(self.start.state))
+        reduce(extract_discontinuities, segments)
+        discontinuities.append(self.Configuration().from_state_node(self.goal))
+        discontinuities.insert(0, discontinuities.append(self.Configuration().from_state_node(self.start)))
+
+        motions = []
+        sectors = zip(discontinuities[:-1], discontinuities[1:])
+        map(plan_motions, sectors)
+        motions.append(self.Configuration().from_state_node(self.goal))
+        return motions
 
     def plot_nodes(self, nodes):
         # type: (List[RRTStar.StateNode]) -> None
@@ -203,6 +258,17 @@ class RRTStar(object):
             rect = plt.Rectangle((xy[0] - grid_res, xy[1] - grid_res), grid_res, grid_res, color=(1.0, 0.1, 0.1))
             plt.gca().add_patch(rect)
 
+    class Configuration(object):
+        def __init__(self, state=(), v=None, k=None):
+            self.state = np.array(state)
+            self.v, self.k = v, k
+
+        def from_state_node(self, state_node):
+            # type: (RRTStar.StateNode) -> RRTStar.Configuration
+            self.state = state_node.state
+            self.v, self.k = state_node.v, state_node.k
+            return self
+
     class StateNode(object):
         def __init__(self, state=()):
             # type: (tuple) -> None
@@ -215,7 +281,7 @@ class RRTStar(object):
             self.parent = None  # type: Optional[RRTStar.StateNode]
             self.children = []  # type: List[RRTStar.StateNode]
             self.status = 0  # 0 for safe, 1 for dangerous.
-            self.v, self.k = None, None  # velocity of the state, curvature of the state (related to the steering angle)
+            self.v, self.k = 0, None  # velocity of the state, curvature of the state (related to the steering angle)
 
         def match(self, x_parent):
             # type: (RRTStar.StateNode) -> None
@@ -229,12 +295,13 @@ class RRTStar(object):
             self.parent.children.remove(self)
             self.match(x_new_parent)
 
-        def trace(self):
+        def trace(self):  # type: ()->List[RRTStar.StateNode]
             p, ptr = [self], self
             while ptr.parent:
                 p.append(ptr)
                 ptr = ptr.parent
-            return p.reverse()
+            p.reverse()
+            return p
 
         def lcs2gcs(self, origin):
             # type: (RRTStar.StateNode) -> None
