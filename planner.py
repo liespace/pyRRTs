@@ -216,7 +216,7 @@ class RRTStar(object):
                     vt = min([np.sqrt(v0**2 + 2*acc*(i*res)), vcc])
                 else:
                     vt = min([np.sqrt(v1**2 + 2*acc*(extent - i*res)), vcc])
-                motions.append(self.Configuration(sample[:3], k=sample[3], v=vt))
+                motions.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4])*vt))
 
         segments = []  # type: List[(float, float)]
         path = [tuple(node.state) for node in self.path]
