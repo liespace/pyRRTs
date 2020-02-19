@@ -1,0 +1,63 @@
+#!/usr/bin/env python
+from copy import deepcopy
+import time
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from PIL import Image
+from planner import RRTStar
+
+
+def center2rear(node, wheelbase=2.96):  # type: (RRTStar.StateNode, float) -> RRTStar.StateNode
+    """calculate the coordinate of rear track center according to mass center"""
+    theta, r = node.state[2] + np.pi, wheelbase / 2.
+    node.state[0] += r * np.cos(theta)
+    node.state[1] += r * np.sin(theta)
+    return node
+
+
+def contour(wheelbase=2.96):
+    return np.array([
+        [-(2.5 - wheelbase/2.), 1.1 - 1.0], [-(2.5 - wheelbase/2. - 0.4), 1.1],
+        [2.5 + wheelbase/2. - 0.6, 1.1], [2.5 + wheelbase/2., 1.1 - 0.8],
+        [2.5 + wheelbase/2., -(1.1 - 0.8)], [2.5 + wheelbase/2. - 0.6, -1.1],
+        [-(2.5 - wheelbase/2. - 0.4), -1.1], [-(2.5 - wheelbase/2.), -(1.1 - 1.0)]])
+
+
+def read_task(filepath, seq=0):
+    """
+    read source(start) and target(goal), and transform to right-hand and local coordinate system centered in source
+    LCS: local coordinate system, or said vehicle-frame.
+    GCS: global coordinate system
+    """
+    # read task and transform coordinate system to right-hand
+    task = np.loadtxt('{}/{}_task.txt'.format(filepath, seq), delimiter=',')
+    org, aim = task[0], task[1]
+    # coordinate of the center of mass on source(start) state, in GCS
+    source = RRTStar.StateNode(state=(org[0], -org[1], -np.radians(org[3])))
+    # coordinate of center of mass on target(goal) state, in GCS
+    target = RRTStar.StateNode(state=(aim[0], -aim[1], -np.radians(aim[3])))
+    return source, target
+
+
+def read_grid(filepath, seq):
+    # type: (str, int) -> np.ndarray
+    """read occupancy grid map"""
+    return np.array(Image.open('{}/{}_gridmap.png'.format(filepath, seq)))
+
+
+def main():
+    filepath, seq = './test_scenes', 0
+    source, target = read_task(filepath, seq)
+    start = center2rear(deepcopy(source)).gcs2lcs(source.state)
+    goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
+    grid_ori = deepcopy(source).gcs2lcs(source.state)
+    grid_map = read_grid(filepath, seq)
+    grid_res = 0.1
+    heuristic = [((0., 0., 0.), (0., 0., 0.))]
+    rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
+    rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
+
+
+if __name__ == '__main__':
+    main()

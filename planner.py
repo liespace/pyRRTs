@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Any
 from copy import deepcopy
 import numpy as np
 import numba
@@ -15,6 +15,7 @@ class RRTStar(object):
         self.goal = None  # type: Optional[RRTStar.StateNode]
         self.grid_map = None  # type: Optional[np.ndarray]
         self.grid_res = None  # type: Optional[float]
+        self.grid_ori = None  # type: Optional[RRTStar.StateNode]
         self.obstacle = None  # type: Optional[int]
         self.heuristic = None  # type: Optional[List[(Tuple[float], Tuple[float], Tuple[float])]]
         self.check_res = 0.3  # type: Optional[float]
@@ -31,9 +32,10 @@ class RRTStar(object):
         :param maximum_curvature: equal to 1/minimum_turning_radius of the vehicle.
         """
         self.check_poly, self.check_res, self.maximum_curvature = check_poly, check_res, maximum_curvature
+        return self
 
-    def preset(self, start, goal, grid_map, grid_res, obstacle, heuristic):
-        # type: (StateNode, StateNode, np.ndarray, float, int, List[Tuple[Tuple[float]]]) -> RRTStar
+    def preset(self, start, goal, grid_map, grid_res, grid_ori, obstacle, heuristic):
+        # type: (StateNode, StateNode, np.ndarray, float, StateNode, int, Any) -> RRTStar
         """
         initialize the parameters for planning: Start State, Goal State and other needs.
         :param start: the start state
@@ -47,7 +49,7 @@ class RRTStar(object):
             form==1: biasing = (r_mu, r_sigma), (theta_mu, theta_sigma), (a_mu, a_sigma).
         :return: RRTStar object
         """
-        self.grid_map, self.grid_res, self.obstacle = grid_map, grid_res, obstacle
+        self.grid_map, self.grid_res, self.grid_ori, self.obstacle = grid_map, grid_res, grid_ori, obstacle
         self.heuristic = heuristic
         self.start, self.goal = start, goal
         self.start.g = self.goal.h = 0
@@ -239,7 +241,7 @@ class RRTStar(object):
         # type: (List[RRTStar.StateNode]) -> None
         for node in nodes:
             c = deepcopy(node)
-            c.gcs2lcs(self.start)
+            c.gcs2lcs(self.grid_ori)
             cir = plt.Circle(xy=(c.x, c.y), radius=0.2, color=(0.5, 0.8, 0.5), alpha=0.6)
             arr = plt.arrow(x=c.x, y=c.y, dx=0.5 * np.cos(c.a), dy=0.5 * np.sin(c.a), width=0.1)
             plt.gca().add_patch(cir)
@@ -304,7 +306,7 @@ class RRTStar(object):
             return p
 
         def lcs2gcs(self, origin):
-            # type: (RRTStar.StateNode) -> None
+            # type: (RRTStar.StateNode) -> RRTStar.StateNode
             """
             transform self's coordinate from local coordinate system (LCS) to global coordinate system (GCS)
             :param origin: the tuple the coordinate (in GCS) of the origin of LCS.
@@ -314,9 +316,10 @@ class RRTStar(object):
             y = self.state[0] * np.sin(ao) + self.state[1] * np.cos(ao) + yo
             a = self.state[2] + ao
             self.state = np.array((x, y, a))
+            return self
 
         def gcs2lcs(self, origin):
-            # type: (RRTStar.StateNode) -> None
+            # type: (RRTStar.StateNode) -> RRTStar.StateNode
             """
             transform self's coordinate from global coordinate system (LCS) to local coordinate system (GCS)
             :param origin: the circle-node contains the coordinate (in GCS) of the origin of LCS.
@@ -326,3 +329,4 @@ class RRTStar(object):
             y = -(self.state[0] - xo) * np.sin(ao) + (self.state[1] - yo) * np.cos(ao)
             a = self.state[2] - ao
             self.state = np.array((x, y, a))
+            return self
