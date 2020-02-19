@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 from copy import deepcopy
+import os
 import time
 import cv2
 import numpy as np
@@ -46,15 +47,47 @@ def read_grid(filepath, seq):
     return np.array(Image.open('{}/{}_gridmap.png'.format(filepath, seq)))
 
 
+def read_ose(filepath, seq):
+    """read heuristic ose"""
+    oseh = np.loadtxt('{}/{}_ose.txt'.format(filepath, seq), delimiter=',')
+    oseh = [((x[0], x[1], x[2]), ((0., x[3]/3.), (0., 2*np.pi/3.), (0., np.pi/4./3.)), 1) for x in oseh]
+    return oseh
+
+
+def read_yips(filepath, seq, discrimination=0.7):
+    yips = np.loadtxt('{}/{}_pred.txt'.format(filepath, seq), delimiter=',')
+    yips = filter(lambda x: x[-1] > discrimination, yips)
+    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951), (0.005, 0.401)), 0) for yip in yips]
+    return yips
+
+
+def set_plot(rrt_star):
+    # type: (RRTStar) -> None
+    plt.ion()
+    plt.figure()
+    plt.gca().set_xticks([])
+    plt.gca().set_yticks([])
+    plt.gca().set_aspect('equal')
+    plt.gca().set_facecolor((0.2, 0.2, 0.2))
+    plt.gca().set_xlim((-30, 30))
+    plt.gca().set_ylim((-30, 30))
+    rrt_star.plot_grid(rrt_star.grid_map, rrt_star.grid_res)
+    rrt_star.plot_nodes([rrt_star.start, rrt_star.goal])
+    plt.draw()
+
+
 def main():
     filepath, seq = './test_scenes', 0
+    heuristic = read_ose(filepath, seq)
+    # heuristic = read_yips(filepath, seq)
+    state, biasing, form = heuristic[0]
+    print (len(heuristic))
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
     grid_ori = deepcopy(source).gcs2lcs(source.state)
     grid_map = read_grid(filepath, seq)
     grid_res = 0.1
-    heuristic = [((0., 0., 0.), (0., 0., 0.))]
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
     rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
 

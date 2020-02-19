@@ -5,6 +5,7 @@ import numba
 import cv2
 import reeds_shepp
 import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse, Wedge
 
 
 class RRTStar(object):
@@ -38,10 +39,11 @@ class RRTStar(object):
         # type: (StateNode, StateNode, np.ndarray, float, StateNode, int, Any) -> RRTStar
         """
         initialize the parameters for planning: Start State, Goal State and other needs.
-        :param start: the start state
-        :param goal: the goal state
-        :param grid_map: occupancy grid map
-        :param grid_res: resolution of grid map,
+        :param start: the start state.
+        :param goal: the goal state.
+        :param grid_map: occupancy grid map.
+        :param grid_res: resolution of grid map.
+        :param grid_ori: the center point of the occupancy grid map.
         :param obstacle: the value of pixels of the obstacles region.
         :param heuristic: [(state, biasing, form)], sampling heuristic path.
             state: state (x_o, y_o, a_o) of the point of the path.
@@ -69,7 +71,7 @@ class RRTStar(object):
     def sample_free(self, n):  # type: (int) -> StateNode
         """sample a state from free configuration space."""
         def collision_free(state):
-            contours = self.contours(self.check_poly, [tuple(state)])
+            contours = self.contours(self.check_poly, [tuple(state)], self.grid_res, self.grid_map.shape[0])
             mask = np.zeros_like(self.grid_map, dtype=np.uint8)
             cv2.fillPoly(mask, contours, 255)
             result = np.bitwise_and(mask, self.grid_map)
@@ -84,21 +86,25 @@ class RRTStar(object):
             return filter(key, self.vertices)
 
         def emerge():
-            i = n % len(self.heuristic)
-            (state, biasing, form) = self.heuristic[i]
-            rand = [state[0], state[1], state[2]]  # [x_o, y_o, a_o]
-            if form == 0:
-                (x_mu, x_sigma), (y_mu, y_sigma), (a_mu, a_sigma) = biasing
-                rand[0] = state[0] + np.random.normal(x_mu, x_sigma, 1)
-                rand[1] = state[1] + np.random.normal(y_mu, y_sigma, 1)
-                rand[2] = state[2] + np.random.normal(a_mu, a_sigma, 1)
+            if self.heuristic:
+                i = n % len(self.heuristic)
+                state, biasing, form = self.heuristic[i]
+                rand = [state[0], state[1], state[2]]  # [x_o, y_o, a_o]
+                if form == 0:
+                    (x_mu, x_sigma), (y_mu, y_sigma), (a_mu, a_sigma) = biasing
+                    rand[0] = state[0] + np.random.normal(x_mu, x_sigma, 1)
+                    rand[1] = state[1] + np.random.normal(y_mu, y_sigma, 1)
+                    rand[2] = state[2] + np.random.normal(a_mu, a_sigma, 1)
+                else:
+                    (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = biasing
+                    r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + state[2]
+                    rand[0] = state[0] + r * np.cos(theta)
+                    rand[1] = state[1] + r * np.sin(theta)
+                    rand[2] = state[2] + np.random.uniform(a_mu, a_mu + a_sigma*3)
+                return rand
             else:
-                (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = biasing
-                r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + state[2]
-                rand[0] = state[0] + r * np.cos(theta)
-                rand[1] = state[1] + r * np.sin(theta)
-                rand[2] = state[2] + np.random.normal(a_mu, a_sigma, 1)
-            return rand
+                vertex = np.random.choice(self.vertices)
+                return [vertex[0], vertex[1], vertex[2]]
 
         while True:
             x_rand = emerge()
@@ -118,8 +124,8 @@ class RRTStar(object):
         """check if the path from one state to another state collides with any obstacles or not."""
         # making contours of the curve
         states = reeds_shepp.path_sample(x_from.state, x_to.state, 1./self.maximum_curvature, 0.3)
-        states.append(tuple(x_to.state))  # include the end point
-        contours = self.contours(self.check_poly, states)
+        # states.append(tuple(x_to.state))  # include the end point
+        contours = self.contours(self.check_poly, states, self.grid_res, self.grid_map.shape[0])
         # making mask
         mask = np.zeros_like(self.grid_map, dtype=np.uint8)
         cv2.fillPoly(mask, contours, 255)
@@ -132,17 +138,16 @@ class RRTStar(object):
         return np.any(result >= self.obstacle)
 
     @staticmethod
-    @numba.njit
-    def contours(check_ploy, states):
-        # type: (np.ndarray, List[Tuple[float]]) -> numba.typed.List[np.ndarray]
+    def contours(check_ploy, states, grid_res, grid_size):
         def transform(pts, pto):
             xyo = np.array([[pto[0]], [pto[1]]])
             rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
             return np.dot(rot, pts) + xyo
-        cons = numba.typed.List()
-        cons.append(check_ploy), cons.pop()
+        cons = []
         for state in states:
-            cons.append(transform(check_ploy.transpose(), state).transpose())
+            con = transform(check_ploy.transpose(), state).transpose()
+            con = np.floor(con / grid_res + grid_size / 2.).astype(int)
+            cons.append(con)
         return cons
 
     def attach(self, x_nearest, x_new):  # type: (StateNode, StateNode) -> None
@@ -241,9 +246,31 @@ class RRTStar(object):
         # type: (List[RRTStar.StateNode]) -> None
         for node in nodes:
             c = deepcopy(node)
-            c.gcs2lcs(self.grid_ori)
+            c = c.gcs2lcs(self.grid_ori.state)
             cir = plt.Circle(xy=(c.x, c.y), radius=0.2, color=(0.5, 0.8, 0.5), alpha=0.6)
             arr = plt.arrow(x=c.x, y=c.y, dx=0.5 * np.cos(c.a), dy=0.5 * np.sin(c.a), width=0.1)
+            plt.gca().add_patch(cir)
+            plt.gca().add_patch(arr)
+
+    def plot_heuristic(self, heuristic):
+        for item in heuristic:
+            state, biasing, form = item
+            c = RRTStar.StateNode(state=state)
+            c = c.gcs2lcs(self.grid_ori.state)
+            if form == 1:
+                cir = plt.Circle(
+                    xy=(c.state[0], c.state[1]), radius=biasing[0][1] * 3, color=(0.5, 0.8, 0.5), alpha=0.6)
+                # arr = plt.arrow(
+                #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
+                arr = Wedge(center=(c.state[0], c.state[1]), r=1.0,
+                            theta1=c.state[2] - biasing[2][1] * 3, theta2=c.state[2] + biasing[2][1] * 3)
+            else:
+                cir = Ellipse(xy=(c.state[0], c.state[1]), width=biasing[0][1]*3*2,
+                              height=biasing[1][1]*3*2, color=(0.5, 0.8, 0.5), alpha=0.6)
+                # arr = plt.arrow(
+                #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
+                arr = Wedge(center=(c.state[0], c.state[1]), r=1.0,
+                            theta1=c.state[2] - biasing[2][1] * 3, theta2=c.state[2] + biasing[2][1] * 3)
             plt.gca().add_patch(cir)
             plt.gca().add_patch(arr)
 
