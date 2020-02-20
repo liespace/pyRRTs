@@ -7,6 +7,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from planner import RRTStar
+from matplotlib.patches import Polygon
 
 
 def center2rear(node, wheelbase=2.96):  # type: (RRTStar.StateNode, float) -> RRTStar.StateNode
@@ -50,7 +51,7 @@ def read_grid(filepath, seq):
 def read_ose(filepath, seq):
     """read heuristic ose"""
     oseh = np.loadtxt('{}/{}_ose.txt'.format(filepath, seq), delimiter=',')
-    oseh = [((x[0], x[1], x[2]), ((0., x[3]/3.), (0., 2*np.pi/3.), (0., np.pi/4./3.)), 1) for x in oseh]
+    oseh = [((x[0], x[1], x[2]), ((0., x[3]/3.), (0., x[3]/3.), (0., np.pi/2./3.)), 0) for x in oseh]
     return oseh
 
 
@@ -73,7 +74,19 @@ def set_plot(rrt_star):
     plt.gca().set_ylim((-30, 30))
     rrt_star.plot_grid(rrt_star.grid_map, rrt_star.grid_res)
     rrt_star.plot_nodes([rrt_star.start, rrt_star.goal])
+    start = Polygon(
+        transform(contour().transpose(), rrt_star.start.state).transpose(), True, color='b', fill=False, linewidth=2.0)
+    goal = Polygon(
+        transform(contour().transpose(), rrt_star.goal.state).transpose(), True, color='g', fill=False, linewidth=2.0)
+    plt.gca().add_patch(start)
+    plt.gca().add_patch(goal)
     plt.draw()
+
+
+def transform(pts, pto):
+    xyo = np.array([[pto[0]], [pto[1]]])
+    rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
+    return np.dot(rot, pts) + xyo
 
 
 def main():
@@ -90,6 +103,12 @@ def main():
     grid_res = 0.1
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
     rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
+
+    set_plot(rrt_star)
+    rrt_star.plot_heuristic(heuristic)
+    plt.draw()
+    raw_input('Plotting')
+
 
 
 if __name__ == '__main__':

@@ -100,7 +100,7 @@ class RRTStar(object):
                     r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + state[2]
                     rand[0] = state[0] + r * np.cos(theta)
                     rand[1] = state[1] + r * np.sin(theta)
-                    rand[2] = state[2] + np.random.uniform(a_mu, a_mu + a_sigma*3)
+                    rand[2] = state[2] + np.random.normal(a_mu, a_sigma)
                 return rand
             else:
                 vertex = np.random.choice(self.vertices)
@@ -247,8 +247,9 @@ class RRTStar(object):
         for node in nodes:
             c = deepcopy(node)
             c = c.gcs2lcs(self.grid_ori.state)
-            cir = plt.Circle(xy=(c.x, c.y), radius=0.2, color=(0.5, 0.8, 0.5), alpha=0.6)
-            arr = plt.arrow(x=c.x, y=c.y, dx=0.5 * np.cos(c.a), dy=0.5 * np.sin(c.a), width=0.1)
+            cir = plt.Circle(xy=(c.state[0], c.state[1]), radius=0.2, color=(0.5, 0.8, 0.5), alpha=0.6)
+            arr = plt.arrow(
+                x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
             plt.gca().add_patch(cir)
             plt.gca().add_patch(arr)
 
@@ -259,18 +260,18 @@ class RRTStar(object):
             c = c.gcs2lcs(self.grid_ori.state)
             if form == 1:
                 cir = plt.Circle(
-                    xy=(c.state[0], c.state[1]), radius=biasing[0][1] * 3, color=(0.5, 0.8, 0.5), alpha=0.6)
+                    xy=(c.state[0], c.state[1]), radius=biasing[0][1], color=(0.5, 0.8, 0.5), alpha=0.6, fill=False)
                 # arr = plt.arrow(
                 #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
-                arr = Wedge(center=(c.state[0], c.state[1]), r=1.0,
-                            theta1=c.state[2] - biasing[2][1] * 3, theta2=c.state[2] + biasing[2][1] * 3)
+                arr = Wedge(center=(c.state[0], c.state[1]), r=0.5, theta1=np.degrees(c.state[2] - biasing[2][1]),
+                            theta2=np.degrees(c.state[2] + biasing[2][1]), fill=False, color=(0.5, 0.8, 0.5))
             else:
-                cir = Ellipse(xy=(c.state[0], c.state[1]), width=biasing[0][1]*3*2,
-                              height=biasing[1][1]*3*2, color=(0.5, 0.8, 0.5), alpha=0.6)
+                cir = Ellipse(xy=(c.state[0], c.state[1]), width=biasing[0][1]*2,
+                              height=biasing[1][1]*2, color=(0.5, 0.8, 0.5), alpha=0.6, fill=False)
                 # arr = plt.arrow(
                 #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
-                arr = Wedge(center=(c.state[0], c.state[1]), r=1.0,
-                            theta1=c.state[2] - biasing[2][1] * 3, theta2=c.state[2] + biasing[2][1] * 3)
+                arr = Wedge(center=(c.state[0], c.state[1]), r=1.0, theta1=np.degrees(c.state[2] - biasing[2][1]),
+                            theta2=np.degrees(c.state[2] + biasing[2][1]), fill=False, color=(0.5, 0.8, 0.5))
             plt.gca().add_patch(cir)
             plt.gca().add_patch(arr)
 
