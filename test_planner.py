@@ -65,7 +65,7 @@ def read_yips(filepath, seq, discrimination=0.7):
     yips = np.loadtxt('{}/{}_pred.txt'.format(filepath, seq), delimiter=',')
     yips = filter(lambda x: x[-1] > discrimination, yips)
     yips = map(center2rear, yips)
-    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951), (0.005, 0.401))) for yip in yips]
+    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951 * 0.6), (0.005, 0.401 * 0.6))) for yip in yips]
     return yips
 
 
@@ -90,7 +90,7 @@ def transform(pts, pto):
 def main():
     filepath, seq = './test_scenes', 0
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
-    heuristic = read_ose(filepath, seq)
+    heuristic = read_yips(filepath, seq)
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)

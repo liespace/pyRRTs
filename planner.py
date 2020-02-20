@@ -66,11 +66,17 @@ class RRTStar(object):
             actor = self.plot_state(x_nearest.state, color='r')
             raw_input('nearest')
             [a.remove() for a in actor]
-            self.vertices.append(x_new)
-            continue
             if self.collision_free(x_nearest, x_new):
+                self.plot_curve(x_nearest, x_new)
+                print ('adding')
                 self.attach(x_nearest, x_new)
-                self.rewire(x_new)
+                # self.rewire(x_new)
+            actor_p = self.plot_nodes(self.path, color='y')
+            plt.draw()
+            raw_input('path' if self.path[-1].fu < np.inf else 'no path')
+            for a, b in actor_p:
+                a.remove()
+                b.remove()
 
     @staticmethod
     def plot_polygon(ploy, color='b'):
@@ -128,22 +134,40 @@ class RRTStar(object):
                     return self.StateNode(tuple(x_rand))
                 raw_input('exist')
             raw_input('collided')
-            [actor.remove() for actor in actor_state]
+            actor_state[0].remove()
+            actor_state[1].remove()
             actor_poly.remove()
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state."""
-        def cost_to_go(x):
-            return self.cost(x, x_rand)
-        costs = list(map(cost_to_go, self.vertices))
+        # def cost_to_go(x):
+        #     return self.cost(x, x_rand)
+        costs = list(map(lambda x: self.cost(x, x_rand), self.vertices))
         x_nearest, min_cost = self.vertices[int(np.argmin(costs))], np.min(costs)
         x_rand.g = x_nearest.g + min_cost
         return x_nearest
+
+    def least(self, x_rand):  # type: (StateNode) -> StateNode
+        nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
+        costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
+        # TODO check if nodes is a empty sequence.
+        x_least, min_cost = nodes[int(np.argmin(costs))], np.min(costs)
+        x_rand.g = min_cost
+        return x_least
+
+    def plot_curve(self, x_from, x_to, color='g'):
+        states = reeds_shepp.path_sample(x_from.state, x_to.state, 1. / self.maximum_curvature, 0.3)
+        x, y = [state[0] for state in states], [state[1] for state in states]
+        plt.plot(x, y, c=color)
 
     def collision_free(self, x_from, x_to):  # type: (StateNode, StateNode) -> bool
         """check if the path from one state to another state collides with any obstacles or not."""
         # making contours of the curve
         states = reeds_shepp.path_sample(x_from.state, x_to.state, 1./self.maximum_curvature, 0.3)
+        actors = [self.plot_polygon(self.transform(self.check_poly.transpose(), state).transpose()) for state in states]
+        plt.draw()
+        raw_input('sub-path')
+        [actor.remove() for actor in actors]
         # states.append(tuple(x_to.state))  # include the end point
         contours = self.contours(self.check_poly, states, self.grid_res, self.grid_map.shape[0])
         # making mask
@@ -155,6 +179,7 @@ class RRTStar(object):
         mask = mask | np.bitwise_not(miss)
         # checking
         result = np.bitwise_and(mask, self.grid_map)
+        print ('free' if np.all(result < self.obstacle) else 'collided')
         return np.all(result < self.obstacle)
 
     @staticmethod
@@ -164,14 +189,14 @@ class RRTStar(object):
         return np.dot(rot, pts) + xyo
 
     @staticmethod
-    def contours(check_ploy, states, grid_res, grid_size):
+    def contours(check_poly, states, grid_res, grid_size):
         def transform(pts, pto):
             xyo = np.array([[pto[0]], [pto[1]]])
             rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
             return np.dot(rot, pts) + xyo
         cons = []
         for state in states:
-            con = transform(check_ploy.transpose(), state).transpose()
+            con = transform(check_poly.transpose(), state).transpose()
             con = np.floor(con / grid_res + grid_size / 2.).astype(int)
             cons.append(con)
         return cons
@@ -203,6 +228,7 @@ class RRTStar(object):
         self.vertices.sort(key=lambda x: x.fu)
         if self.vertices[0].fu < np.inf:
             p = self.vertices[0].trace()
+            self.goal.g = self.goal.fu = self.vertices[0].fu
             p.append(self.goal)
             return p
         else:
@@ -269,11 +295,12 @@ class RRTStar(object):
         motions.append(self.Configuration().from_state_node(self.goal))
         return motions
 
-    def plot_nodes(self, nodes):
-        # type: (List[RRTStar.StateNode]) -> None
+    def plot_nodes(self, nodes, color=None):
+        # type: (List[RRTStar.StateNode], Any) -> Any
         actors = []
         for node in nodes:
-            actors.append(self.plot_state(node.state))
+            actors.append(self.plot_state(node.state, color if color else (0.5, 0.8, 0.5)))
+        return actors
 
     @staticmethod
     def plot_state(state, color=(0.5, 0.8, 0.5)):
@@ -348,8 +375,8 @@ class RRTStar(object):
             self.match(x_new_parent)
 
         def trace(self):  # type: ()->List[RRTStar.StateNode]
-            p, ptr = [self], self
-            while ptr.parent:
+            p, ptr = [self], self.parent
+            while ptr:
                 p.append(ptr)
                 ptr = ptr.parent
             p.reverse()
