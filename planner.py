@@ -5,7 +5,7 @@ import numba
 import cv2
 import reeds_shepp
 import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse, Wedge
+from matplotlib.patches import Ellipse, Wedge, Polygon
 
 
 class RRTStar(object):
@@ -45,10 +45,9 @@ class RRTStar(object):
         :param grid_res: resolution of grid map.
         :param grid_ori: the center point of the occupancy grid map.
         :param obstacle: the value of pixels of the obstacles region.
-        :param heuristic: [(state, biasing, form)], sampling heuristic path.
+        :param heuristic: [(state, biasing)], sampling heuristic path.
             state: state (x_o, y_o, a_o) of the point of the path.
-            form==0: biasing = (x_mu, x_sigma), (y_mu, y_sigma), (a_mu, a_sigma).
-            form==1: biasing = (r_mu, r_sigma), (theta_mu, theta_sigma), (a_mu, a_sigma).
+            biasing = (x_mu, x_sigma), (y_mu, y_sigma), (a_mu, a_sigma).
         :return: RRTStar object
         """
         self.grid_map, self.grid_res, self.grid_ori, self.obstacle = grid_map, grid_res, grid_ori, obstacle
@@ -64,18 +63,30 @@ class RRTStar(object):
         for i in range(times):
             x_new = self.sample_free(i)
             x_nearest = self.nearest(x_new)
+            actor = self.plot_state(x_nearest.state, color='r')
+            raw_input('nearest')
+            [a.remove() for a in actor]
+            self.vertices.append(x_new)
+            continue
             if self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
 
-    def sample_free(self, n):  # type: (int) -> StateNode
+    @staticmethod
+    def plot_polygon(ploy, color='b'):
+        actor = Polygon(ploy, True, color=color, fill=False, linewidth=2.0)
+        plt.gca().add_patch(actor)
+        return actor
+
+    def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
         """sample a state from free configuration space."""
-        def collision_free(state):
+        def is_free(state):
             contours = self.contours(self.check_poly, [tuple(state)], self.grid_res, self.grid_map.shape[0])
             mask = np.zeros_like(self.grid_map, dtype=np.uint8)
             cv2.fillPoly(mask, contours, 255)
             result = np.bitwise_and(mask, self.grid_map)
-            return np.any(result >= self.obstacle)
+            cv2.imshow('result', result)
+            return np.all(result < self.obstacle)
 
         def exist(state):
             def key(y):
@@ -88,28 +99,37 @@ class RRTStar(object):
         def emerge():
             if self.heuristic:
                 i = n % len(self.heuristic)
-                state, biasing, form = self.heuristic[i]
+                state, biasing = self.heuristic[i]
                 rand = [state[0], state[1], state[2]]  # [x_o, y_o, a_o]
-                if form == 0:
-                    (x_mu, x_sigma), (y_mu, y_sigma), (a_mu, a_sigma) = biasing
-                    rand[0] = state[0] + np.random.normal(x_mu, x_sigma, 1)
-                    rand[1] = state[1] + np.random.normal(y_mu, y_sigma, 1)
-                    rand[2] = state[2] + np.random.normal(a_mu, a_sigma, 1)
-                else:
-                    (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = biasing
-                    r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + state[2]
-                    rand[0] = state[0] + r * np.cos(theta)
-                    rand[1] = state[1] + r * np.sin(theta)
-                    rand[2] = state[2] + np.random.normal(a_mu, a_sigma)
+                (x_mu, x_sigma), (y_mu, y_sigma), (a_mu, a_sigma) = biasing
+                rand[0] += np.random.normal(x_mu, x_sigma)
+                rand[1] += np.random.normal(y_mu, y_sigma)
+                rand[2] += np.random.normal(a_mu, a_sigma)
                 return rand
             else:
                 vertex = np.random.choice(self.vertices)
-                return [vertex[0], vertex[1], vertex[2]]
+                rand = [vertex[0], vertex[1], vertex[2]]
+                (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = default
+                r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + rand[2]
+                rand[0] += r * np.cos(theta)
+                rand[1] += r * np.sin(theta)
+                rand[2] += np.random.normal(a_mu, a_sigma)
+                return rand
 
         while True:
             x_rand = emerge()
-            if collision_free(x_rand) and not exist(x_rand):
-                return self.StateNode(tuple(x_rand))
+            actor_state = self.plot_state(x_rand)
+            actor_poly = self.plot_polygon(self.transform(self.check_poly.transpose(), x_rand).transpose())
+            plt.draw()
+            raw_input('emerged')
+            if is_free(x_rand):
+                if not exist(x_rand):
+                    actor_poly.remove()
+                    return self.StateNode(tuple(x_rand))
+                raw_input('exist')
+            raw_input('collided')
+            [actor.remove() for actor in actor_state]
+            actor_poly.remove()
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state."""
@@ -135,7 +155,13 @@ class RRTStar(object):
         mask = mask | np.bitwise_not(miss)
         # checking
         result = np.bitwise_and(mask, self.grid_map)
-        return np.any(result >= self.obstacle)
+        return np.all(result < self.obstacle)
+
+    @staticmethod
+    def transform(pts, pto):
+        xyo = np.array([[pto[0]], [pto[1]]])
+        rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
+        return np.dot(rot, pts) + xyo
 
     @staticmethod
     def contours(check_ploy, states, grid_res, grid_size):
@@ -157,6 +183,7 @@ class RRTStar(object):
         (x_new.hu, x_new.hl) = (cost, cost) if available else (np.inf, cost)
         x_new.fu, x_new.fl = x_new.g + x_new.hu, x_new.g + x_new.hl
         x_new.status = 0 if available else 1
+        self.vertices.append(x_new)
 
     def rewire(self, x_new, gamma=0.2):  # type: (StateNode, float) -> None
         """rewiring tree by the new state."""
@@ -244,34 +271,29 @@ class RRTStar(object):
 
     def plot_nodes(self, nodes):
         # type: (List[RRTStar.StateNode]) -> None
+        actors = []
         for node in nodes:
-            c = deepcopy(node)
-            c = c.gcs2lcs(self.grid_ori.state)
-            cir = plt.Circle(xy=(c.state[0], c.state[1]), radius=0.2, color=(0.5, 0.8, 0.5), alpha=0.6)
-            arr = plt.arrow(
-                x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
-            plt.gca().add_patch(cir)
-            plt.gca().add_patch(arr)
+            actors.append(self.plot_state(node.state))
 
-    def plot_heuristic(self, heuristic):
+    @staticmethod
+    def plot_state(state, color=(0.5, 0.8, 0.5)):
+        cir = plt.Circle(xy=(state[0], state[1]), radius=0.2, color=color, alpha=0.6)
+        arr = plt.arrow(x=state[0], y=state[1], dx=0.5 * np.cos(state[2]), dy=0.5 * np.sin(state[2]), width=0.1)
+        plt.gca().add_patch(cir)
+        plt.gca().add_patch(arr)
+        return cir, arr
+
+    @staticmethod
+    def plot_heuristic(heuristic, color=(0.5, 0.8, 0.5)):
         for item in heuristic:
-            state, biasing, form = item
+            state, biasing = item
             c = RRTStar.StateNode(state=state)
-            c = c.gcs2lcs(self.grid_ori.state)
-            if form == 1:
-                cir = plt.Circle(
-                    xy=(c.state[0], c.state[1]), radius=biasing[0][1], color=(0.5, 0.8, 0.5), alpha=0.6, fill=False)
-                # arr = plt.arrow(
-                #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
-                arr = Wedge(center=(c.state[0], c.state[1]), r=0.5, theta1=np.degrees(c.state[2] - biasing[2][1]),
-                            theta2=np.degrees(c.state[2] + biasing[2][1]), fill=False, color=(0.5, 0.8, 0.5))
-            else:
-                cir = Ellipse(xy=(c.state[0], c.state[1]), width=biasing[0][1]*2,
-                              height=biasing[1][1]*2, color=(0.5, 0.8, 0.5), alpha=0.6, fill=False)
-                # arr = plt.arrow(
-                #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
-                arr = Wedge(center=(c.state[0], c.state[1]), r=1.0, theta1=np.degrees(c.state[2] - biasing[2][1]),
-                            theta2=np.degrees(c.state[2] + biasing[2][1]), fill=False, color=(0.5, 0.8, 0.5))
+            cir = Ellipse(xy=(c.state[0], c.state[1]), width=biasing[0][1]*2*2,
+                          height=biasing[1][1]*2*2, color=color, alpha=0.6, fill=False)
+            # arr = plt.arrow(
+            #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
+            arr = Wedge(center=(c.state[0], c.state[1]), r=1.0, theta1=np.degrees(c.state[2] - biasing[2][1]*2),
+                        theta2=np.degrees(c.state[2] + biasing[2][1]*2), fill=False, color=color)
             plt.gca().add_patch(cir)
             plt.gca().add_patch(arr)
 

@@ -66,16 +66,20 @@ def main():
     mask = np.zeros_like(grid_map, dtype=np.uint8)
     past = time.time()
     cv2.fillPoly(mask, [cont0, cont1], 255)
-    mode = np.zeros((600 + 2, 600 + 2), np.uint8)
-    miss = mask.copy()
-    cv2.floodFill(miss, mode, (0, 0), 255)
+    # mode = np.zeros((600 + 2, 600 + 2), np.uint8)
+    # miss = mask.copy()
+    # cv2.floodFill(miss, mode, (0, 0), 255)
     now = time.time()
     print ((now - past) * 1000)
 
     # mask = mask | np.bitwise_not(miss)
     # result = np.bitwise_and(mask, grid_map)
     # print (np.any(result==127))
-    cv2.imshow("Mask", mask + grid_map - 1)
+    result = np.bitwise_and(mask, grid_map)
+    print (grid_map.min())
+    print (np.all(result < 255))
+
+    cv2.imshow("Mask", result)
 
     cv2.waitKey(0)
 

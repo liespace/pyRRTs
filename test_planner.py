@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from typing import Any
 from copy import deepcopy
 import os
 import time
@@ -10,8 +11,13 @@ from planner import RRTStar
 from matplotlib.patches import Polygon
 
 
-def center2rear(node, wheelbase=2.96):  # type: (RRTStar.StateNode, float) -> RRTStar.StateNode
+def center2rear(node, wheelbase=2.96):
     """calculate the coordinate of rear track center according to mass center"""
+    if not isinstance(node, RRTStar.StateNode):
+        theta, r = node[2] + np.pi, wheelbase / 2.
+        node[0] += r * np.cos(theta)
+        node[1] += r * np.sin(theta)
+        return node
     theta, r = node.state[2] + np.pi, wheelbase / 2.
     node.state[0] += r * np.cos(theta)
     node.state[1] += r * np.sin(theta)
@@ -51,19 +57,19 @@ def read_grid(filepath, seq):
 def read_ose(filepath, seq):
     """read heuristic ose"""
     oseh = np.loadtxt('{}/{}_ose.txt'.format(filepath, seq), delimiter=',')
-    oseh = [((x[0], x[1], x[2]), ((0., x[3]/3.), (0., x[3]/3.), (0., np.pi/2./3.)), 0) for x in oseh]
+    oseh = [((x[0], x[1], x[2]), ((0., x[3]/3.), (0., x[3]/3.), (0., x[3]/3. * np.pi/3./3.))) for x in oseh]
     return oseh
 
 
 def read_yips(filepath, seq, discrimination=0.7):
     yips = np.loadtxt('{}/{}_pred.txt'.format(filepath, seq), delimiter=',')
     yips = filter(lambda x: x[-1] > discrimination, yips)
-    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951), (0.005, 0.401)), 0) for yip in yips]
+    yips = map(center2rear, yips)
+    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951), (0.005, 0.401))) for yip in yips]
     return yips
 
 
-def set_plot(rrt_star):
-    # type: (RRTStar) -> None
+def set_plot():
     plt.ion()
     plt.figure()
     plt.gca().set_xticks([])
@@ -72,14 +78,6 @@ def set_plot(rrt_star):
     plt.gca().set_facecolor((0.2, 0.2, 0.2))
     plt.gca().set_xlim((-30, 30))
     plt.gca().set_ylim((-30, 30))
-    rrt_star.plot_grid(rrt_star.grid_map, rrt_star.grid_res)
-    rrt_star.plot_nodes([rrt_star.start, rrt_star.goal])
-    start = Polygon(
-        transform(contour().transpose(), rrt_star.start.state).transpose(), True, color='b', fill=False, linewidth=2.0)
-    goal = Polygon(
-        transform(contour().transpose(), rrt_star.goal.state).transpose(), True, color='g', fill=False, linewidth=2.0)
-    plt.gca().add_patch(start)
-    plt.gca().add_patch(goal)
     plt.draw()
 
 
@@ -91,24 +89,30 @@ def transform(pts, pto):
 
 def main():
     filepath, seq = './test_scenes', 0
+    rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
     heuristic = read_ose(filepath, seq)
-    # heuristic = read_yips(filepath, seq)
-    state, biasing, form = heuristic[0]
-    print (len(heuristic))
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
     grid_ori = deepcopy(source).gcs2lcs(source.state)
     grid_map = read_grid(filepath, seq)
     grid_res = 0.1
-    rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
-    rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
 
-    set_plot(rrt_star)
+    set_plot()
+    rrt_star.plot_grid(grid_map, grid_res)
+    rrt_star.plot_nodes([start, goal])
+    plt.gca().add_patch(Polygon(
+        transform(contour().transpose(), start.state).transpose(), True, color='b', fill=False, lw=2.0))
+    plt.gca().add_patch(Polygon(
+        transform(contour().transpose(), goal.state).transpose(), True, color='g', fill=False, lw=2.0))
     rrt_star.plot_heuristic(heuristic)
     plt.draw()
-    raw_input('Plotting')
 
+    rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
+
+    rrt_star.planning(100)
+
+    raw_input('Plotting')
 
 
 if __name__ == '__main__':
