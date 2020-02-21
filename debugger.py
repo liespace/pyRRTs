@@ -1,13 +1,70 @@
-from typing import List, Tuple, Optional, Any
-from copy import deepcopy
 import numpy as np
-import cv2
 import reeds_shepp
 import matplotlib.pyplot as plt
 from matplotlib.patches import Ellipse, Wedge, Polygon
 
 
 class Debugger(object):
+    path_history = []
+
+    def debug_nearest_searching(self, state, switch=True):
+        if switch:
+            actor = self.plot_state(state, color='r')
+            raw_input('nearest node')
+            self.remove(actor)
+
+    def debug_planned_path(self, path, no, switch=True):
+        if switch:
+            self.path_history.append((no, path[-1].fu if path[-1].fu < np.inf else 0))
+            np.savetxt('path_history.csv', self.path_history, delimiter=',')
+            actor = self.plot_nodes(path, 'r')
+            raw_input('Planned Path {}'.format(path[-1].fu))
+            self.remove(actor)
+
+    def debug_sample_emerging(self, x_rand, poly, switch=True):
+        if switch:
+            actor_state = Debugger.plot_state(x_rand)
+            actor_poly = Debugger.plot_polygon(self.transform(poly, x_rand))
+            raw_input('sample emerged')
+            self.remove(actor_poly)
+            self.remove(actor_state)
+
+    def debug_sampling(self, state, switch=True):
+        if switch:
+            actor = self.plot_state(state)
+            raw_input('new node')
+            self.remove(actor)
+
+    def debug_collision_checking(self, states, poly, result, switch=True):
+        if switch:
+            actors = [self.plot_polygon(self.transform(poly, state))[0] for state in states]
+            words = 'free' if result else 'collided'
+            raw_input('collision checked ({})'.format(words))
+            self.remove(actors)
+
+    def debug_attaching(self, x_nearest, x_new, rho, switch=True):
+        if switch:
+            self.plot_curve(x_nearest, x_new, rho)
+            raw_input('added new node ({}, {}, {})'.format(x_new.g, x_new.hu, x_new.fu))
+
+    def debug_rewiring_check(self, xs, x_new, switch=True):
+        if switch:
+            actors = self.plot_nodes(xs, color='r')
+            raw_input('rewire checked (g={}, n={})'.format(x_new.g, len(xs)))
+            self.remove(actors)
+
+    def debug_rewiring(self, x, cost, switch=True):
+        if switch:
+            actor_state = self.plot_state(x.state, color='r')
+            raw_input('need rewiring {} -> {}'.format(x.g, cost))
+            self.remove(actor_state)
+
+    @staticmethod
+    def transform(poly, pto):
+        pts = poly.transpose()
+        xyo = np.array([[pto[0]], [pto[1]]])
+        rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
+        return (np.dot(rot, pts) + xyo).transpose()
 
     @staticmethod
     def plot_polygon(ploy, color='b', lw=2., fill=False):

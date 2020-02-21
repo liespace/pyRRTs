@@ -60,17 +60,11 @@ class RRTStar(object):
         self.root, self.vertices = self.start, [self.start]
         for i in range(times):
             x_new = self.sample_free(i)
-            x_nearest = self.least(x_new)
-            actor = Debugger.plot_state(x_nearest.state, color='r')
-            raw_input('nearest node')
-            Debugger.remove(actor)
+            x_nearest = self.nearest(x_new)
             if self.collision_free(x_nearest, x_new):
-                Debugger.plot_curve(x_nearest, x_new, 1./self.maximum_curvature)
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
-            actor = Debugger().plot_nodes(self.path, 'r')
-            raw_input('Planned Path {}'.format(self.path[-1].fu))
-            Debugger.remove(actor)
+            Debugger().debug_planned_path(self.path, i)
 
     def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
         """sample a state from free configuration space."""
@@ -112,34 +106,38 @@ class RRTStar(object):
 
         while True:
             x_rand = emerge()
-            actor_state = Debugger.plot_state(x_rand)
-            actor_poly = Debugger.plot_polygon(self.transform(self.check_poly.transpose(), x_rand).transpose())
-            raw_input('sample emerged')
+            Debugger().debug_sample_emerging(x_rand, self.check_poly)
             if is_free(x_rand):
                 if not exist(x_rand):
-                    Debugger.remove(actor_poly)
+                    Debugger().debug_sampling(x_rand)
                     return self.StateNode(tuple(x_rand))
                 raw_input('sample existed')
-            Debugger.remove(actor_poly)
-            Debugger.remove(actor_state)
             raw_input('sample collided')
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state."""
-        # def cost_to_go(x):
-        #     return self.cost(x, x_rand)
+        if self.collision_free(self.start, x_rand):
+            x_rand.g = self.cost(self.start, x_rand)
+            Debugger().debug_nearest_searching(self.start.state)
+            return self.start
         costs = list(map(lambda x: self.cost(x, x_rand), self.vertices))
         x_nearest, min_cost = self.vertices[int(np.argmin(costs))], np.min(costs)
         x_rand.g = x_nearest.g + min_cost
+        Debugger().debug_nearest_searching(x_nearest.state)
         return x_nearest
 
     def least(self, x_rand):  # type: (StateNode) -> StateNode
+        if self.collision_free(self.start, x_rand):
+            x_rand.g = self.cost(self.start, x_rand)
+            Debugger().debug_nearest_searching(self.start.state)
+            return self.start
         nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
         # TODO check if nodes is a empty sequence.
         if nodes:
             costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
             x_least, min_cost = nodes[int(np.argmin(costs))], np.min(costs)
             x_rand.g = min_cost
+            Debugger().debug_nearest_searching(x_least.state)
             return x_least
         return self.start
 
@@ -158,18 +156,8 @@ class RRTStar(object):
         mask = mask | np.bitwise_not(miss)
         # checking
         result = np.bitwise_and(mask, self.grid_map)
-
-        actors = [Debugger.plot_polygon(self.transform(self.check_poly.transpose(), state).transpose())[0] for state in states]
-        words = 'free' if np.all(result < self.obstacle) else 'collided'
-        raw_input('collision checked ({})'.format(words))
-        Debugger.remove(actors)
+        Debugger().debug_collision_checking(states, self.check_poly, np.all(result < self.obstacle))
         return np.all(result < self.obstacle)
-
-    @staticmethod
-    def transform(pts, pto):
-        xyo = np.array([[pto[0]], [pto[1]]])
-        rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
-        return np.dot(rot, pts) + xyo
 
     @staticmethod
     def contours(check_poly, states, grid_res, grid_size):
@@ -192,23 +180,19 @@ class RRTStar(object):
         x_new.fu, x_new.fl = x_new.g + x_new.hu, x_new.g + x_new.hl
         x_new.status = 0 if available else 1
         self.vertices.append(x_new)
-        raw_input('added new node ({}, {}, {})'.format(x_new.g, x_new.hu, x_new.fu))
+        Debugger().debug_attaching(x_nearest, x_new, 1./self.maximum_curvature)
 
     def rewire(self, x_new, gamma=0.2):  # type: (StateNode, float) -> None
         """rewiring tree by the new state."""
         def recheck(x):
             available, cost = self.collision_free(x_new, x), self.cost(x_new, x)
             if available and x.g > x_new.g + cost:
-                actor_state = Debugger.plot_state(x.state, color='r')
-                raw_input('need rewiring {} -> {}'.format(x.g, x_new.g + cost))
-                Debugger.remove(actor_state)
+                Debugger().debug_rewiring(x, x_new.g + cost)
                 x.g = x_new.g + cost
                 x.fu, x.fl = x.g + x.hu, x.g + x.hl
                 x.rematch(x_new)
         xs = filter(lambda x: x.g > x_new.g + gamma, self.vertices)
-        actors = Debugger().plot_nodes(xs, color='r')
-        raw_input('rewire checked (g={}, n={})'.format(x_new.g, len(xs)))
-        Debugger.remove(actors)
+        Debugger().debug_rewiring_check(xs, x_new)
         map(recheck, xs)
 
     def cost(self, x_from, x_to):  # type: (StateNode, StateNode) -> float

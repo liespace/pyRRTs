@@ -66,7 +66,7 @@ def read_yips(filepath, seq, discrimination=0.7):
     yips = np.loadtxt('{}/{}_pred.txt'.format(filepath, seq), delimiter=',')
     yips = filter(lambda x: x[-1] > discrimination, yips)
     yips = map(center2rear, yips)
-    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951 * 0.6), (0.005, 0.401 * 0.6))) for yip in yips]
+    yips = [((yip[0], yip[1], yip[2]), ((0.621, 2.146), (0.015, 1.951 * 1.0), (0.005, 0.401 * 1.0))) for yip in yips]
     return yips
 
 
