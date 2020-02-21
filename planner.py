@@ -62,7 +62,7 @@ class RRTStar(object):
         self.root, self.vertices = self.start, [self.start]
         for i in range(times):
             x_new = self.sample_free(i)
-            x_nearest = self.nearest(x_new)
+            x_nearest = self.least(x_new)
             actor = self.plot_state(x_nearest.state, color='r')
             raw_input('nearest')
             [a.remove() for a in actor]
@@ -70,13 +70,14 @@ class RRTStar(object):
                 self.plot_curve(x_nearest, x_new)
                 print ('adding')
                 self.attach(x_nearest, x_new)
-                # self.rewire(x_new)
-            actor_p = self.plot_nodes(self.path, color='y')
+                self.rewire(x_new)
+            actor_p = self.plot_nodes(self.path, color='r')
             plt.draw()
             raw_input('path' if self.path[-1].fu < np.inf else 'no path')
             for a, b in actor_p:
                 a.remove()
                 b.remove()
+                plt.draw()
 
     @staticmethod
     def plot_polygon(ploy, color='b'):
@@ -137,6 +138,7 @@ class RRTStar(object):
             actor_state[0].remove()
             actor_state[1].remove()
             actor_poly.remove()
+            plt.draw()
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state."""
@@ -149,11 +151,13 @@ class RRTStar(object):
 
     def least(self, x_rand):  # type: (StateNode) -> StateNode
         nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
-        costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
         # TODO check if nodes is a empty sequence.
-        x_least, min_cost = nodes[int(np.argmin(costs))], np.min(costs)
-        x_rand.g = min_cost
-        return x_least
+        if nodes:
+            costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
+            x_least, min_cost = nodes[int(np.argmin(costs))], np.min(costs)
+            x_rand.g = min_cost
+            return x_least
+        return self.start
 
     def plot_curve(self, x_from, x_to, color='g'):
         states = reeds_shepp.path_sample(x_from.state, x_to.state, 1. / self.maximum_curvature, 0.3)
@@ -207,6 +211,7 @@ class RRTStar(object):
         available, cost = self.collision_free(x_new, self.goal), self.cost(x_new, self.goal)
         (x_new.hu, x_new.hl) = (cost, cost) if available else (np.inf, cost)
         x_new.fu, x_new.fl = x_new.g + x_new.hu, x_new.g + x_new.hl
+        print (x_new.g, x_new.hl, x_new.hu)
         x_new.status = 0 if available else 1
         self.vertices.append(x_new)
 
@@ -214,8 +219,19 @@ class RRTStar(object):
         """rewiring tree by the new state."""
         def recheck(x):
             if self.collision_free(x_new, x) and x.g > x_new.g + self.cost(x_new, x):
+                actor_state = self.plot_state(x.state, color='r')
+                raw_input('need rewiring')
+                actor_state[0].remove()
+                actor_state[1].remove()
+                plt.draw()
                 x.rematch(x_new)
         xs = filter(lambda x: x.g > x_new.g + gamma, self.vertices)
+        actors = self.plot_nodes(xs, color='r')
+        raw_input('rewiring')
+        for actor in actors:
+            actor[0].remove()
+            actor[1].remove()
+            plt.draw()
         map(recheck, xs)
 
     def cost(self, x_from, x_to):  # type: (StateNode, StateNode) -> float
