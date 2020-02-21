@@ -1,4 +1,5 @@
 from typing import List, Tuple, Optional, Any
+import time
 import numpy as np
 import numba
 import cv2
@@ -8,6 +9,7 @@ from debugger import Debugger
 
 class RRTStar(object):
     def __init__(self):
+        self.debug = False
         self.vertices = None  # type: Optional[List[RRTStar.StateNode]]
         self.root = None  # type: Optional[RRTStar.StateNode]
         self.start = None  # type: Optional[RRTStar.StateNode]
@@ -55,16 +57,36 @@ class RRTStar(object):
         self.start.h = self.goal.g = self.cost(start, goal) if self.collision_free(start, goal) else 0
         return self
 
-    def planning(self, times):  # type: (int) -> None
+    def planning(self, times, debug=False):
         """main flow."""
+        self.debug = debug
         self.root, self.vertices = self.start, [self.start]
+        past = time.time()
         for i in range(times):
             x_new = self.sample_free(i)
             x_nearest = self.nearest(x_new)
             if self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
-            Debugger().debug_planned_path(self.path, i)
+            Debugger().debug_planned_path(self.path, i, switch=self.debug)
+            Debugger().debug_planning_hist(self.path, i, (time.time() - past) * 1000, switch=True)
+        print('Runtime: {} ms, Length: {}'.format((time.time() - past) * 1000, self.path[-1].fu))
+        Debugger().save_hist()
+
+    def optimizing(self, times, debug=False):
+        self.debug = debug
+        self.root, self.vertices = self.start, [self.start]
+        past = time.time()
+        for i in range(times):
+            x_new = self.sample_free(i)
+            x_least = self.least(x_new)
+            if x_least:
+                self.attach(x_least, x_new)
+                self.rewire(x_new)
+            Debugger().debug_planned_path(self.path, i, switch=self.debug)
+            Debugger().debug_planning_hist(self.path, i, (time.time() - past) * 1000, switch=True)
+        print('Runtime: {} ms, Length: {}'.format((time.time() - past) * 1000, self.path[-1].fu))
+        Debugger().save_hist()
 
     def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
         """sample a state from free configuration space."""
@@ -106,40 +128,41 @@ class RRTStar(object):
 
         while True:
             x_rand = emerge()
-            Debugger().debug_sample_emerging(x_rand, self.check_poly)
+            Debugger().debug_sample_emerging(x_rand, self.check_poly, switch=self.debug)
             if is_free(x_rand):
                 if not exist(x_rand):
-                    Debugger().debug_sampling(x_rand)
+                    Debugger().debug_sampling(x_rand, switch=self.debug)
                     return self.StateNode(tuple(x_rand))
-                raw_input('sample existed')
-            raw_input('sample collided')
+                Debugger.breaker('sample existed', switch=self.debug)
+            Debugger.breaker('sample collided', switch=self.debug)
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state."""
+        # quick shot
         if self.collision_free(self.start, x_rand):
             x_rand.g = self.cost(self.start, x_rand)
-            Debugger().debug_nearest_searching(self.start.state)
+            Debugger().debug_nearest_searching(self.start.state, switch=self.debug)
             return self.start
         costs = list(map(lambda x: self.cost(x, x_rand), self.vertices))
         x_nearest, min_cost = self.vertices[int(np.argmin(costs))], np.min(costs)
         x_rand.g = x_nearest.g + min_cost
-        Debugger().debug_nearest_searching(x_nearest.state)
+        Debugger().debug_nearest_searching(x_nearest.state, switch=self.debug)
         return x_nearest
 
     def least(self, x_rand):  # type: (StateNode) -> StateNode
+        # quick shot
         if self.collision_free(self.start, x_rand):
             x_rand.g = self.cost(self.start, x_rand)
-            Debugger().debug_nearest_searching(self.start.state)
+            Debugger().debug_nearest_searching(self.start.state, switch=self.debug)
             return self.start
         nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
-        # TODO check if nodes is a empty sequence.
         if nodes:
             costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
             x_least, min_cost = nodes[int(np.argmin(costs))], np.min(costs)
             x_rand.g = min_cost
-            Debugger().debug_nearest_searching(x_least.state)
+            Debugger().debug_nearest_searching(x_least.state, switch=self.debug)
             return x_least
-        return self.start
+        return None
 
     def collision_free(self, x_from, x_to):  # type: (StateNode, StateNode) -> bool
         """check if the path from one state to another state collides with any obstacles or not."""
@@ -156,7 +179,7 @@ class RRTStar(object):
         mask = mask | np.bitwise_not(miss)
         # checking
         result = np.bitwise_and(mask, self.grid_map)
-        Debugger().debug_collision_checking(states, self.check_poly, np.all(result < self.obstacle))
+        Debugger().debug_collision_checking(states, self.check_poly, np.all(result < self.obstacle), switch=self.debug)
         return np.all(result < self.obstacle)
 
     @staticmethod
@@ -180,19 +203,19 @@ class RRTStar(object):
         x_new.fu, x_new.fl = x_new.g + x_new.hu, x_new.g + x_new.hl
         x_new.status = 0 if available else 1
         self.vertices.append(x_new)
-        Debugger().debug_attaching(x_nearest, x_new, 1./self.maximum_curvature)
+        Debugger().debug_attaching(x_nearest, x_new, 1./self.maximum_curvature, switch=self.debug)
 
     def rewire(self, x_new, gamma=0.2):  # type: (StateNode, float) -> None
         """rewiring tree by the new state."""
         def recheck(x):
             available, cost = self.collision_free(x_new, x), self.cost(x_new, x)
             if available and x.g > x_new.g + cost:
-                Debugger().debug_rewiring(x, x_new.g + cost)
+                Debugger().debug_rewiring(x, x_new.g + cost, switch=self.debug)
                 x.g = x_new.g + cost
                 x.fu, x.fl = x.g + x.hu, x.g + x.hl
                 x.rematch(x_new)
         xs = filter(lambda x: x.g > x_new.g + gamma, self.vertices)
-        Debugger().debug_rewiring_check(xs, x_new)
+        Debugger().debug_rewiring_check(xs, x_new, switch=self.debug)
         map(recheck, xs)
 
     def cost(self, x_from, x_to):  # type: (StateNode, StateNode) -> float

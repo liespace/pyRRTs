@@ -70,16 +70,17 @@ def read_yips(filepath, seq, discrimination=0.7):
     return yips
 
 
-def set_plot():
-    plt.ion()
-    plt.figure()
-    plt.gca().set_xticks([])
-    plt.gca().set_yticks([])
-    plt.gca().set_aspect('equal')
-    plt.gca().set_facecolor((0.2, 0.2, 0.2))
-    plt.gca().set_xlim((-30, 30))
-    plt.gca().set_ylim((-30, 30))
-    plt.draw()
+def set_plot(switch=True):
+    if switch:
+        plt.ion()
+        plt.figure()
+        plt.gca().set_xticks([])
+        plt.gca().set_yticks([])
+        plt.gca().set_aspect('equal')
+        plt.gca().set_facecolor((0.2, 0.2, 0.2))
+        plt.gca().set_xlim((-30, 30))
+        plt.gca().set_ylim((-30, 30))
+        plt.draw()
 
 
 def transform(pts, pto):
@@ -89,7 +90,7 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq = './test_scenes', 0
+    filepath, seq, debug = './test_scenes', 0, True
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
     heuristic = read_ose(filepath, seq)
     source, target = read_task(filepath, seq)
@@ -99,21 +100,22 @@ def main():
     grid_map = read_grid(filepath, seq)
     grid_res = 0.1
 
-    set_plot()
-    Debugger.plot_grid(grid_map, grid_res)
-    Debugger().plot_nodes([start, goal])
-    plt.gca().add_patch(Polygon(
-        transform(contour().transpose(), start.state).transpose(), True, color='b', fill=False, lw=2.0))
-    plt.gca().add_patch(Polygon(
-        transform(contour().transpose(), goal.state).transpose(), True, color='g', fill=False, lw=2.0))
-    Debugger.plot_heuristic(heuristic)
-    plt.draw()
+    if debug:
+        set_plot(debug)
+        Debugger.plot_grid(grid_map, grid_res)
+        Debugger().plot_nodes([start, goal])
+        plt.gca().add_patch(Polygon(
+            transform(contour().transpose(), start.state).transpose(), True, color='b', fill=False, lw=2.0))
+        plt.gca().add_patch(Polygon(
+            transform(contour().transpose(), goal.state).transpose(), True, color='g', fill=False, lw=2.0))
+        Debugger.plot_heuristic(heuristic)
+        plt.draw()
 
     rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
 
-    rrt_star.planning(100)
+    rrt_star.planning(100, debug=debug)
 
-    raw_input('Plotting')
+    Debugger.breaker('Plotting', switch=debug)
 
 
 if __name__ == '__main__':

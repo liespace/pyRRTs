@@ -5,7 +5,7 @@ from matplotlib.patches import Ellipse, Wedge, Polygon
 
 
 class Debugger(object):
-    path_history = []
+    plan_hist = []
 
     def debug_nearest_searching(self, state, switch=True):
         if switch:
@@ -13,12 +13,17 @@ class Debugger(object):
             raw_input('nearest node')
             self.remove(actor)
 
+    def debug_planning_hist(self, path, no, runtime, switch=True):
+        if switch:
+            self.plan_hist.append((no, runtime, path[-1].fu if path[-1].fu < np.inf else 0))
+
+    def save_hist(self):
+        np.savetxt('plan_hist.csv', self.plan_hist, delimiter=',')
+
     def debug_planned_path(self, path, no, switch=True):
         if switch:
-            self.path_history.append((no, path[-1].fu if path[-1].fu < np.inf else 0))
-            np.savetxt('path_history.csv', self.path_history, delimiter=',')
             actor = self.plot_nodes(path, 'r')
-            raw_input('Planned Path {}'.format(path[-1].fu))
+            raw_input('Planned Path {}, Times {}'.format(path[-1].fu, no))
             self.remove(actor)
 
     def debug_sample_emerging(self, x_rand, poly, switch=True):
@@ -58,6 +63,11 @@ class Debugger(object):
             actor_state = self.plot_state(x.state, color='r')
             raw_input('need rewiring {} -> {}'.format(x.g, cost))
             self.remove(actor_state)
+
+    @staticmethod
+    def breaker(words, switch=True):
+        if switch:
+            raw_input(words)
 
     @staticmethod
     def transform(poly, pto):
