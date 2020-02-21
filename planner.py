@@ -1,11 +1,9 @@
 from typing import List, Tuple, Optional, Any
-from copy import deepcopy
 import numpy as np
 import numba
 import cv2
 import reeds_shepp
-import matplotlib.pyplot as plt
-from matplotlib.patches import Ellipse, Wedge, Polygon
+from debugger import Debugger
 
 
 class RRTStar(object):
@@ -63,27 +61,16 @@ class RRTStar(object):
         for i in range(times):
             x_new = self.sample_free(i)
             x_nearest = self.least(x_new)
-            actor = self.plot_state(x_nearest.state, color='r')
-            raw_input('nearest')
-            [a.remove() for a in actor]
+            actor = Debugger.plot_state(x_nearest.state, color='r')
+            raw_input('nearest node')
+            Debugger.remove(actor)
             if self.collision_free(x_nearest, x_new):
-                self.plot_curve(x_nearest, x_new)
-                print ('adding')
+                Debugger.plot_curve(x_nearest, x_new, 1./self.maximum_curvature)
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
-            actor_p = self.plot_nodes(self.path, color='r')
-            plt.draw()
-            raw_input('path' if self.path[-1].fu < np.inf else 'no path')
-            for a, b in actor_p:
-                a.remove()
-                b.remove()
-                plt.draw()
-
-    @staticmethod
-    def plot_polygon(ploy, color='b'):
-        actor = Polygon(ploy, True, color=color, fill=False, linewidth=2.0)
-        plt.gca().add_patch(actor)
-        return actor
+            actor = Debugger().plot_nodes(self.path, 'r')
+            raw_input('Planned Path {}'.format(self.path[-1].fu))
+            Debugger.remove(actor)
 
     def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
         """sample a state from free configuration space."""
@@ -125,20 +112,17 @@ class RRTStar(object):
 
         while True:
             x_rand = emerge()
-            actor_state = self.plot_state(x_rand)
-            actor_poly = self.plot_polygon(self.transform(self.check_poly.transpose(), x_rand).transpose())
-            plt.draw()
-            raw_input('emerged')
+            actor_state = Debugger.plot_state(x_rand)
+            actor_poly = Debugger.plot_polygon(self.transform(self.check_poly.transpose(), x_rand).transpose())
+            raw_input('sample emerged')
             if is_free(x_rand):
                 if not exist(x_rand):
-                    actor_poly.remove()
+                    Debugger.remove(actor_poly)
                     return self.StateNode(tuple(x_rand))
-                raw_input('exist')
-            raw_input('collided')
-            actor_state[0].remove()
-            actor_state[1].remove()
-            actor_poly.remove()
-            plt.draw()
+                raw_input('sample existed')
+            Debugger.remove(actor_poly)
+            Debugger.remove(actor_state)
+            raw_input('sample collided')
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state."""
@@ -159,19 +143,10 @@ class RRTStar(object):
             return x_least
         return self.start
 
-    def plot_curve(self, x_from, x_to, color='g'):
-        states = reeds_shepp.path_sample(x_from.state, x_to.state, 1. / self.maximum_curvature, 0.3)
-        x, y = [state[0] for state in states], [state[1] for state in states]
-        plt.plot(x, y, c=color)
-
     def collision_free(self, x_from, x_to):  # type: (StateNode, StateNode) -> bool
         """check if the path from one state to another state collides with any obstacles or not."""
         # making contours of the curve
         states = reeds_shepp.path_sample(x_from.state, x_to.state, 1./self.maximum_curvature, 0.3)
-        actors = [self.plot_polygon(self.transform(self.check_poly.transpose(), state).transpose()) for state in states]
-        plt.draw()
-        raw_input('sub-path')
-        [actor.remove() for actor in actors]
         # states.append(tuple(x_to.state))  # include the end point
         contours = self.contours(self.check_poly, states, self.grid_res, self.grid_map.shape[0])
         # making mask
@@ -183,7 +158,11 @@ class RRTStar(object):
         mask = mask | np.bitwise_not(miss)
         # checking
         result = np.bitwise_and(mask, self.grid_map)
-        print ('free' if np.all(result < self.obstacle) else 'collided')
+
+        actors = [Debugger.plot_polygon(self.transform(self.check_poly.transpose(), state).transpose())[0] for state in states]
+        words = 'free' if np.all(result < self.obstacle) else 'collided'
+        raw_input('collision checked ({})'.format(words))
+        Debugger.remove(actors)
         return np.all(result < self.obstacle)
 
     @staticmethod
@@ -211,27 +190,25 @@ class RRTStar(object):
         available, cost = self.collision_free(x_new, self.goal), self.cost(x_new, self.goal)
         (x_new.hu, x_new.hl) = (cost, cost) if available else (np.inf, cost)
         x_new.fu, x_new.fl = x_new.g + x_new.hu, x_new.g + x_new.hl
-        print (x_new.g, x_new.hl, x_new.hu)
         x_new.status = 0 if available else 1
         self.vertices.append(x_new)
+        raw_input('added new node ({}, {}, {})'.format(x_new.g, x_new.hu, x_new.fu))
 
     def rewire(self, x_new, gamma=0.2):  # type: (StateNode, float) -> None
         """rewiring tree by the new state."""
         def recheck(x):
-            if self.collision_free(x_new, x) and x.g > x_new.g + self.cost(x_new, x):
-                actor_state = self.plot_state(x.state, color='r')
-                raw_input('need rewiring')
-                actor_state[0].remove()
-                actor_state[1].remove()
-                plt.draw()
+            available, cost = self.collision_free(x_new, x), self.cost(x_new, x)
+            if available and x.g > x_new.g + cost:
+                actor_state = Debugger.plot_state(x.state, color='r')
+                raw_input('need rewiring {} -> {}'.format(x.g, x_new.g + cost))
+                Debugger.remove(actor_state)
+                x.g = x_new.g + cost
+                x.fu, x.fl = x.g + x.hu, x.g + x.hl
                 x.rematch(x_new)
         xs = filter(lambda x: x.g > x_new.g + gamma, self.vertices)
-        actors = self.plot_nodes(xs, color='r')
-        raw_input('rewiring')
-        for actor in actors:
-            actor[0].remove()
-            actor[1].remove()
-            plt.draw()
+        actors = Debugger().plot_nodes(xs, color='r')
+        raw_input('rewire checked (g={}, n={})'.format(x_new.g, len(xs)))
+        Debugger.remove(actors)
         map(recheck, xs)
 
     def cost(self, x_from, x_to):  # type: (StateNode, StateNode) -> float
@@ -310,48 +287,6 @@ class RRTStar(object):
         map(plan_motions, sectors)
         motions.append(self.Configuration().from_state_node(self.goal))
         return motions
-
-    def plot_nodes(self, nodes, color=None):
-        # type: (List[RRTStar.StateNode], Any) -> Any
-        actors = []
-        for node in nodes:
-            actors.append(self.plot_state(node.state, color if color else (0.5, 0.8, 0.5)))
-        return actors
-
-    @staticmethod
-    def plot_state(state, color=(0.5, 0.8, 0.5)):
-        cir = plt.Circle(xy=(state[0], state[1]), radius=0.2, color=color, alpha=0.6)
-        arr = plt.arrow(x=state[0], y=state[1], dx=0.5 * np.cos(state[2]), dy=0.5 * np.sin(state[2]), width=0.1)
-        plt.gca().add_patch(cir)
-        plt.gca().add_patch(arr)
-        return cir, arr
-
-    @staticmethod
-    def plot_heuristic(heuristic, color=(0.5, 0.8, 0.5)):
-        for item in heuristic:
-            state, biasing = item
-            c = RRTStar.StateNode(state=state)
-            cir = Ellipse(xy=(c.state[0], c.state[1]), width=biasing[0][1]*2*2,
-                          height=biasing[1][1]*2*2, color=color, alpha=0.6, fill=False)
-            # arr = plt.arrow(
-            #     x=c.state[0], y=c.state[1], dx=0.5 * np.cos(c.state[2]), dy=0.5 * np.sin(c.state[2]), width=0.1)
-            arr = Wedge(center=(c.state[0], c.state[1]), r=1.0, theta1=np.degrees(c.state[2] - biasing[2][1]*2),
-                        theta2=np.degrees(c.state[2] + biasing[2][1]*2), fill=False, color=color)
-            plt.gca().add_patch(cir)
-            plt.gca().add_patch(arr)
-
-    @staticmethod
-    def plot_grid(grid_map, grid_res):
-        # type: (np.ndarray, float) -> None
-        """plot grid map"""
-        row, col = grid_map.shape[0], grid_map.shape[1]
-        indexes = np.argwhere(grid_map == 255)
-        xy2uv = np.array([[0., 1. / grid_res, row / 2.], [1. / grid_res, 0., col / 2.], [0., 0., 1.]])
-        for index in indexes:
-            uv = np.array([index[0], index[1], 1])
-            xy = np.dot(np.linalg.inv(xy2uv), uv)
-            rect = plt.Rectangle((xy[0] - grid_res, xy[1] - grid_res), grid_res, grid_res, color=(1.0, 0.1, 0.1))
-            plt.gca().add_patch(rect)
 
     class Configuration(object):
         def __init__(self, state=(), v=None, k=None):

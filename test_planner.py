@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 from planner import RRTStar
+from debugger import Debugger
 from matplotlib.patches import Polygon
 
 
@@ -90,7 +91,7 @@ def transform(pts, pto):
 def main():
     filepath, seq = './test_scenes', 0
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
-    heuristic = read_yips(filepath, seq)
+    heuristic = read_ose(filepath, seq)
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
@@ -99,13 +100,13 @@ def main():
     grid_res = 0.1
 
     set_plot()
-    rrt_star.plot_grid(grid_map, grid_res)
-    rrt_star.plot_nodes([start, goal])
+    Debugger.plot_grid(grid_map, grid_res)
+    Debugger().plot_nodes([start, goal])
     plt.gca().add_patch(Polygon(
         transform(contour().transpose(), start.state).transpose(), True, color='b', fill=False, lw=2.0))
     plt.gca().add_patch(Polygon(
         transform(contour().transpose(), goal.state).transpose(), True, color='g', fill=False, lw=2.0))
-    rrt_star.plot_heuristic(heuristic)
+    Debugger.plot_heuristic(heuristic)
     plt.draw()
 
     rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
