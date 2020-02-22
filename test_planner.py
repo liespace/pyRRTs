@@ -90,9 +90,11 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq, debug = './test_scenes', 0, False
-    rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
-    heuristic = read_ose(filepath, seq)
+    filepath, seq, debug = './test_scenes', 0, True
+    rrt_star = BiRRTStar().set_vehicle(contour(), 0.3, 0.25)
+    # heuristic = read_ose(filepath, seq)
+    # heuristic = read_yips(filepath, seq)
+    heuristic = None
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
@@ -108,7 +110,8 @@ def main():
             transform(contour().transpose(), start.state).transpose(), True, color='b', fill=False, lw=2.0))
         plt.gca().add_patch(Polygon(
             transform(contour().transpose(), goal.state).transpose(), True, color='g', fill=False, lw=2.0))
-        Debugger.plot_heuristic(heuristic)
+        if heuristic:
+            Debugger.plot_heuristic(heuristic)
         plt.draw()
 
     rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic).planning(100, debug=debug)

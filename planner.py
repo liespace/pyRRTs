@@ -91,7 +91,7 @@ class RRTStar(object):
         map(out, vs)
         Debugger().debug_branch_and_bound(vs, switch=self.debug)
 
-    def sample_free(self, n, default=((0., 2.0), (0., np.pi / 4.), (0, np.pi / 6.))):
+    def sample_free(self, n, default=((2., .5), (0., np.pi / 4.), (0, np.pi / 6.))):
         """sample a state from free configuration space."""
 
         def is_free(state):
@@ -124,8 +124,8 @@ class RRTStar(object):
                 rand[2] += np.random.normal(a_mu, a_sigma)
                 return rand
             else:
-                vertex = np.random.choice(self.vertices)
-                rand = [vertex[0], vertex[1], vertex[2]]
+                Debugger().debug_no_heuristic(vertex.state, default)
+                rand = [vertex.state[0], vertex.state[1], vertex.state[2]]
                 (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = default
                 r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + rand[2]
                 rand[0] += r * np.cos(theta)
@@ -133,13 +133,13 @@ class RRTStar(object):
                 rand[2] += np.random.normal(a_mu, a_sigma)
                 return rand
 
+        vertex = np.random.choice(self.vertices)
         while True:
             x_rand = emerge()
             Debugger().debug_sampling(x_rand, self.check_poly, switch=self.debug)
             if is_free(x_rand):
                 if not exist(x_rand):
                     return self.StateNode(tuple(x_rand))
-            Debugger.breaker('sample collided', switch=self.debug)
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state.
@@ -428,14 +428,16 @@ class BiRRTStar(RRTStar):
             self.root = self.goal
             self.gain = self.start
             self.vertices = self.g_vertices
-            Debugger.breaker('swap: goal -> start, {}, {}'.format(i, -((i/2) % len(self.heuristic)) - 1), self.debug)
-            return -((i/2) % len(self.heuristic)) - 1 if self.heuristic else i
+            n = -((i/2) % len(self.heuristic)) - 1 if self.heuristic else i
+            Debugger.breaker('swap: goal -> start, {}, {}'.format(i, n, self.debug))
+            return n
         else:
             self.root = self.start
             self.gain = self.goal
             self.vertices = self.s_vertices
-            Debugger.breaker('swap: start -> goal, {}, {}'.format(i, (i/2) % len(self.heuristic)), self.debug)
-            return (i/2) % len(self.heuristic) if self.heuristic else i
+            n = (i/2) % len(self.heuristic) if self.heuristic else i
+            Debugger.breaker('swap: start -> goal, {}, {}'.format(i, n, self.debug))
+            return n
 
     def planning(self, times, debug=False):
         """main flow."""

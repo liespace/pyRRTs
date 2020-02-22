@@ -65,6 +65,18 @@ class Debugger(object):
             self.remove(actor_poly)
             self.remove(actor_state)
 
+    def debug_no_heuristic(self, state, default):
+        (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = default
+        x, y, a = state[0], state[1], state[2]
+        cir = plt.gca().add_patch(
+            Wedge(center=(x, y), r=r_mu+2*r_sigma, width=4*r_sigma, fill=False, color=(0.5, 0.8, 0.5),
+                  theta1=np.degrees(a+t_mu-t_sigma*2), theta2=np.degrees(a+t_mu+t_sigma*2)))
+        arr = plt.gca().add_patch(
+            Wedge(center=(x, y), r=1.0, theta1=np.degrees(a+a_mu-a_sigma*2), theta2=np.degrees(a+a_mu+a_sigma*2),
+                  fill=False, color=(0.5, 0.8, 0.5)))
+        raw_input('gaussian heuristic')
+        self.remove([[cir, arr]])
+
     def debug_collision_checking(self, states, poly, result, switch=True):
         if switch:
             actors = [self.plot_polygon(self.transform(poly, state))[0] for state in states]
@@ -114,7 +126,7 @@ class Debugger(object):
         x, y = [state[0] for state in states], [state[1] for state in states]
         actor = plt.plot(x, y, c=color)
         plt.draw()
-        return [actor]
+        return actor
 
     def plot_nodes(self, nodes, color=None):
         def plotting(x):
