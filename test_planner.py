@@ -90,7 +90,7 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq, debug = './test_scenes', 0, True
+    filepath, seq, debug = './test_scenes', 85, False
     rrt_star = BiRRTStar().set_vehicle(contour(), 0.3, 0.25)
     # heuristic = read_ose(filepath, seq)
     # heuristic = read_yips(filepath, seq)

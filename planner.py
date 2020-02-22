@@ -124,7 +124,7 @@ class RRTStar(object):
                 rand[2] += np.random.normal(a_mu, a_sigma)
                 return rand
             else:
-                Debugger().debug_no_heuristic(vertex.state, default)
+                Debugger().debug_no_heuristic(vertex.state, default, self.debug)
                 rand = [vertex.state[0], vertex.state[1], vertex.state[2]]
                 (r_mu, r_sigma), (t_mu, t_sigma), (a_mu, a_sigma) = default
                 r, theta = np.random.normal(r_mu, r_sigma), np.random.normal(t_mu, t_sigma) + rand[2]
@@ -429,14 +429,14 @@ class BiRRTStar(RRTStar):
             self.gain = self.start
             self.vertices = self.g_vertices
             n = -((i/2) % len(self.heuristic)) - 1 if self.heuristic else i
-            Debugger.breaker('swap: goal -> start, {}, {}'.format(i, n, self.debug))
+            Debugger.breaker('swap: goal -> start, {}, {}'.format(i, n), self.debug)
             return n
         else:
             self.root = self.start
             self.gain = self.goal
             self.vertices = self.s_vertices
             n = (i/2) % len(self.heuristic) if self.heuristic else i
-            Debugger.breaker('swap: start -> goal, {}, {}'.format(i, n, self.debug))
+            Debugger.breaker('swap: start -> goal, {}, {}'.format(i, n), self.debug)
             return n
 
     def planning(self, times, debug=False):
@@ -479,11 +479,11 @@ class BiRRTStar(RRTStar):
                 x_nearest.neighbor = x_new
                 self.x_best = x_new
 
-    def path(self):  # type: () -> List[RRTStar.StateNode]
+    def path(self):
         x_best = self.x_best
         if x_best.fu < np.inf:
             p = x_best.trace()
-            if hasattr(x_best, 'neighbor'):
+            if hasattr(x_best, 'neighbor') and x_best.neighbor:
                 p1 = x_best.neighbor.trace()
                 p1.reverse()
                 p.extend(p1)
