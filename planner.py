@@ -1,7 +1,7 @@
 from typing import List, Tuple, Optional, Any
 import time
-import numpy as np
 import numba
+import numpy as np
 import cv2
 import reeds_shepp
 from debugger import Debugger
@@ -95,11 +95,12 @@ class RRTStar(object):
         """sample a state from free configuration space."""
 
         def is_free(state):
-            contours = self.contours(self.check_poly, [tuple(state)], self.grid_res, self.grid_map.shape[0])
+            contour = self.transform(self.check_poly, state[0], state[1], state[2])
+            contour = np.floor(contour / self.grid_res + self.grid_map.shape[0] / 2.).astype(int)
             mask = np.zeros_like(self.grid_map, dtype=np.uint8)
-            cv2.fillPoly(mask, contours, 255)
+            cv2.fillPoly(mask, [contour], 255)
             result = np.bitwise_and(mask, self.grid_map)
-            cv2.imshow('result', result)
+            Debugger().breaker('sample free: {}'.format(np.all(result < self.obstacle)), self.debug)
             return np.all(result < self.obstacle)
 
         def exist(state):
@@ -107,9 +108,10 @@ class RRTStar(object):
                 dxy = np.fabs(y.state[:-1] - s[:-1])
                 da = ((y.state[-1] + np.pi) % (2 * np.pi) - np.pi) - ((s[-1] + np.pi) % (2 * np.pi) - np.pi)
                 return dxy[0] < self.exist_res and dxy[1] < self.exist_res and da < self.exist_res
-
             s = np.array(state)
-            return filter(key, self.vertices)
+            result = filter(key, self.vertices)
+            Debugger.breaker('sample exclusive: {}'.format(result == []), switch=self.debug)
+            return result
 
         def emerge():
             if self.heuristic:
@@ -137,7 +139,6 @@ class RRTStar(object):
             if is_free(x_rand):
                 if not exist(x_rand):
                     return self.StateNode(tuple(x_rand))
-                Debugger.breaker('sample existed', switch=self.debug)
             Debugger.breaker('sample collided', switch=self.debug)
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
@@ -189,32 +190,23 @@ class RRTStar(object):
         # making contours of the curve
         states = reeds_shepp.path_sample(x_from.state, x_to.state, 1. / self.maximum_curvature, 0.3)
         # states.append(tuple(x_to.state))  # include the end point
-        contours = self.contours(self.check_poly, states, self.grid_res, self.grid_map.shape[0])
+        contours = [self.transform(self.check_poly, s[0], s[1], s[2]) for s in states]
+        contours = [np.floor(con / self.grid_res + self.grid_map.shape[0] / 2.).astype(int) for con in contours]
         # making mask
         mask = np.zeros_like(self.grid_map, dtype=np.uint8)
-        cv2.fillPoly(mask, contours, 255)
-        mode = np.zeros((self.grid_map.shape[0] + 2, self.grid_map.shape[1] + 2), np.uint8)
-        miss = mask.copy()
-        cv2.floodFill(miss, mode, (0, 0), 255)
-        mask = mask | np.bitwise_not(miss)
+        [cv2.fillPoly(mask, [con], 255) for con in contours]
         # checking
         result = np.bitwise_and(mask, self.grid_map)
         Debugger().debug_collision_checking(states, self.check_poly, np.all(result < self.obstacle), switch=self.debug)
         return np.all(result < self.obstacle)
 
     @staticmethod
-    def contours(check_poly, states, grid_res, grid_size):
-        def transform(pts, pto):
-            xyo = np.array([[pto[0]], [pto[1]]])
-            rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
-            return np.dot(rot, pts) + xyo
-
-        cons = []
-        for state in states:
-            con = transform(check_poly.transpose(), state).transpose()
-            con = np.floor(con / grid_res + grid_size / 2.).astype(int)
-            cons.append(con)
-        return cons
+    @numba.njit
+    def transform(poly, x, y, a):
+        pts = poly.transpose()
+        xyo = np.array([[x], [y]])
+        rot = np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]])
+        return (np.dot(rot, pts) + xyo).transpose()
 
     def attach(self, x_nearest, x_new):  # type: (StateNode, StateNode) -> None
         """add the new state to the tree and complement other values.

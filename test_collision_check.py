@@ -5,6 +5,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from planner import RRTStar
+import reeds_shepp
 
 
 def center2rear(node, wheelbase=2.96):  # type: (RRTStar.StateNode, float) -> RRTStar.StateNode
@@ -23,10 +24,11 @@ def contour(wheelbase=2.96):
         [-(2.5 - wheelbase/2. - 0.4), -1.1], [-(2.5 - wheelbase/2.), -(1.1 - 1.0)]])
 
 
-def transform(pts, pto):
+def transform(poly, pto):
+    pts = poly.transpose()
     xyo = np.array([[pto[0]], [pto[1]]])
     rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
-    return np.dot(rot, pts) + xyo
+    return (np.dot(rot, pts) + xyo).transpose()
 
 
 def read_task(filepath, seq=0):
@@ -58,14 +60,13 @@ def main():
     start = center2rear(deepcopy(source).gcs2lcs(source.state))
     goal = center2rear(deepcopy(target).gcs2lcs(source.state))
 
-    cont0 = transform(contour().transpose(), start.state).transpose()
-    cont0 = np.floor(cont0 / 0.1 + 600 / 2.).astype(int)
-    cont1 = transform(contour().transpose(), goal.state).transpose()
-    cont1 = np.floor(cont1 / 0.1 + 600 / 2.).astype(int)
+    states = reeds_shepp.path_sample(start.state, goal.state, 5.0, 0.3)
+    cons = [transform(contour(), state) for state in states]
+    cons = [np.floor(con / 0.1 + 600 / 2.).astype(int) for con in cons]
 
     mask = np.zeros_like(grid_map, dtype=np.uint8)
     past = time.time()
-    cv2.fillPoly(mask, [cont0, cont1], 255)
+    [cv2.fillPoly(mask, [con], 255) for con in cons]
     # mode = np.zeros((600 + 2, 600 + 2), np.uint8)
     # miss = mask.copy()
     # cv2.floodFill(miss, mode, (0, 0), 255)
@@ -79,7 +80,7 @@ def main():
     print (grid_map.min())
     print (np.all(result < 255))
 
-    cv2.imshow("Mask", result)
+    cv2.imshow("Mask", mask)
 
     cv2.waitKey(0)
 
