@@ -7,7 +7,7 @@ import cv2
 import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
-from planner import RRTStar
+from planner import RRTStar, BiRRTStar
 from debugger import Debugger
 from matplotlib.patches import Polygon
 
@@ -91,7 +91,7 @@ def transform(pts, pto):
 
 def main():
     filepath, seq, debug = './test_scenes', 0, False
-    rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
+    rrt_star = BiRRTStar().set_vehicle(contour(), 0.3, 0.25)
     heuristic = read_ose(filepath, seq)
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)

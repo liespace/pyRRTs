@@ -57,11 +57,9 @@ class RRTStar(object):
         self.grid_map, self.grid_res, self.grid_ori, self.obstacle = grid_map, grid_res, grid_ori, obstacle
         self.heuristic = heuristic
         self.start, self.goal = start, goal
-        self.start.g = self.goal.hl = self.goal.hu = 0
-        self.start.hl = self.cost(start, goal)
-        self.start.hu = self.goal.g = self.start.hl if self.collision_free(start, goal) else np.inf
+        self.start.g, self.start.hl = 0, self.cost(start, goal)
+        self.start.hu = self.start.hl if self.collision_free(start, goal) else np.inf
         self.start.fl, self.start.fu = self.start.g + self.start.hl, self.start.g + self.start.hu
-        self.goal.fl, self.goal.fu = self.goal.g + self.goal.hl, self.goal.g + self.goal.hu
         self.root, self.gain = self.start, self.goal
         self.vertices, self.x_best = [self.root], self.root
         return self
@@ -76,20 +74,20 @@ class RRTStar(object):
             if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
-            self.x_best = self.best()
-            self.branch_and_bound()
+                self.x_best = self.best()
+                self.branch_and_bound()
             Debugger().debug_planned_path(self, i, switch=self.debug)
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
         print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
             (time.time() - past) * 1000, self.x_best.fu, self.root.hl, len(self.vertices)))
         Debugger().save_hist()
 
-    def branch_and_bound(self):
+    def branch_and_bound(self, space=None):
         def out(x):
-            self.vertices.remove(x)
+            vertices.remove(x)
             x.remove()
-
-        vs = filter(lambda x: x.fl > self.x_best.fu, self.vertices)
+        vertices = space if space else self.vertices
+        vs = filter(lambda x: x.fl > self.x_best.fu, vertices)
         map(out, vs)
         Debugger().debug_branch_and_bound(vs, switch=self.debug)
 
@@ -252,10 +250,9 @@ class RRTStar(object):
     def best(self):
         return sorted(self.vertices, key=lambda x: x.fu)[0]
 
-    def spare(self):
-        return sorted(self.vertices, key=lambda x: x.hl)[0]
+    def spare(self, space=None):
+        return sorted(self.vertices if not space else space, key=lambda x: x.hl)[0]
 
-    @property
     def path(self):  # type: () -> List[RRTStar.StateNode]
         """extract the planning result. including the goal state if the the goal is available"""
         x_best = self.best()
@@ -313,7 +310,7 @@ class RRTStar(object):
                 motions.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4]) * vt))
 
         segments = []  # type: List[(float, float)]
-        path = [tuple(node.state) for node in self.path]
+        path = [tuple(node.state) for node in self.path()]
         reduce(extract_segments, path)
         segments = zip(segments[:-1], segments[1:])  # type: List[(Tuple[float], Tuple[float])]
 
@@ -410,3 +407,102 @@ class RRTStar(object):
 class BiRRTStar(RRTStar):
     def __init__(self):
         super(BiRRTStar, self).__init__()
+        self.s_vertices = None
+        self.g_vertices = None
+
+    def preset(self, start, goal, grid_map, grid_res, grid_ori, obstacle, heuristic):
+        self.grid_map, self.grid_res, self.grid_ori, self.obstacle = grid_map, grid_res, grid_ori, obstacle
+        self.heuristic = heuristic
+        self.start, self.goal = start, goal
+
+        self.start.g, self.start.hl = 0, self.cost(start, goal)
+        self.start.hu = self.start.hl if self.collision_free(start, goal) else np.inf
+        self.start.fl, self.start.fu = self.start.g + self.start.hl, self.start.g + self.start.hu
+
+        self.goal.g, self.goal.hl = 0, self.cost(goal, start)
+        self.goal.hu = self.goal.hl if self.collision_free(goal, start) else np.inf
+        self.goal.fl, self.goal.fu = self.goal.g + self.goal.hl, self.goal.g + self.goal.hu
+
+        self.root, self.gain = self.start, self.goal
+        self.s_vertices = [self.start]
+        self.g_vertices = [self.goal]
+        self.x_best = self.root
+        return self
+
+    def swap(self, i):
+        self.branch_and_bound(self.g_vertices)
+        self.branch_and_bound(self.s_vertices)
+        if self.root is self.start:
+            self.root = self.goal
+            self.gain = self.start
+            self.vertices = self.g_vertices
+            Debugger.breaker('swap: goal -> start, {}, {}'.format(i, -((i/2) % len(self.heuristic)) - 1), self.debug)
+            return -((i/2) % len(self.heuristic)) - 1 if self.heuristic else i
+        else:
+            self.root = self.start
+            self.gain = self.goal
+            self.vertices = self.s_vertices
+            Debugger.breaker('swap: start -> goal, {}, {}'.format(i, (i/2) % len(self.heuristic)), self.debug)
+            return (i/2) % len(self.heuristic) if self.heuristic else i
+
+    def planning(self, times, debug=False):
+        """main flow."""
+        self.debug = debug
+        past = time.time()
+        for i in range(times):
+            n = self.swap(i)
+            x_new = self.sample_free(n)
+            x_nearest = self.nearest(x_new)
+            if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
+                self.attach(x_nearest, x_new)
+                self.rewire(x_new)
+                self.x_best = self.best_of_all()
+                self.connect_graphs(x_new)
+            Debugger().debug_planned_path(self, i, switch=self.debug)
+            Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
+        Debugger().save_hist()
+        print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
+            (time.time() - past) * 1000, self.x_best.fu, self.root.hl, len(self.vertices)))
+
+    def best_of_all(self):
+        x_new_best = self.best()
+        return x_new_best if x_new_best.fu < self.x_best.fu else self.x_best
+
+    def connect_graphs(self, x_new):
+        if self.root is self.start:
+            vs = self.g_vertices
+        else:
+            vs = self.s_vertices
+        costs = map(lambda x: self.cost(x_new, x), vs)
+        x_nearest, cost = vs[int(np.argmin(costs))], np.min(costs)
+        Debugger().debug_connect_graphs(x_nearest.state, x_new.g+cost+x_nearest.g, self.x_best.fu, switch=self.debug)
+        if x_new.g + cost + x_nearest.g < self.x_best.fu:
+            if self.collision_free(x_new, x_nearest):
+                x_nearest.fu = x_new.fu = x_new.g + cost + x_nearest.g
+                x_new.hu = x_new.fu - x_new.g
+                x_nearest.hu = x_nearest.fu - x_nearest.g
+                x_new.neighbor = x_nearest
+                x_nearest.neighbor = x_new
+                self.x_best = x_new
+
+    def path(self):  # type: () -> List[RRTStar.StateNode]
+        x_best = self.x_best
+        if x_best.fu < np.inf:
+            p = x_best.trace()
+            if hasattr(x_best, 'neighbor'):
+                p1 = x_best.neighbor.trace()
+                p1.reverse()
+                p.extend(p1)
+                if p[-1] is self.start:
+                    p.reverse()
+                return p
+            else:
+                if p[0] is self.start:
+                    p.append(self.gain)
+                else:
+                    p.append(self.start)
+                    p.reverse()
+                return p
+        else:
+            x_spare = self.spare(space=self.s_vertices)
+            return x_spare.trace()

@@ -20,21 +20,42 @@ class Debugger(object):
             raw_input('nearest node')
             self.remove(actor)
 
+    def debug_connect_graphs(self, state, cost, best, switch=True):
+        if switch:
+            actor = self.plot_state(state, color='r')
+            raw_input('connect graphs: {} / ({}, {})'.format(cost < best, cost, best))
+            self.remove(actor)
+
     def debug_planning_hist(self, planner, no, runtime, switch=True):
         if switch:
-            p = planner.path
-            self.plan_hist.append((no, runtime, p[-1].fu if p[-1].fu < np.inf else 0, len(planner.vertices)))
+            p = planner.path()
+            self.plan_hist.append(
+                (no, runtime, planner.x_best.fu if planner.x_best.fu < np.inf else 0, len(planner.vertices)))
 
     def save_hist(self):
         np.savetxt('plan_hist.csv', self.plan_hist, delimiter=',')
 
     def debug_planned_path(self, planner, no, switch=True):
         if switch:
-            p = planner.path
+            p = planner.path()
+            actor_p = self.plot_path(p, 1. / planner.maximum_curvature)
             actor = self.plot_nodes(p, 'r')
             raw_input('Planned Path {}/ {}, Times {}, Vertex {}'.format(
-                p[-1].fu, planner.start.hl, no, len(planner.vertices)))
+                planner.x_best.fu, planner.start.hl, no, len(planner.vertices)))
             self.remove(actor)
+            self.remove(actor_p)
+
+    @staticmethod
+    def plot_path(path, rho):
+        pp = zip(path[:-1], path[1:])
+        states = []
+        for p in pp:
+            states.extend(reeds_shepp.path_sample(p[0].state, p[1].state, rho, 0.3))
+        xs = [state[0] for state in states]
+        ys = [state[1] for state in states]
+        actor = plt.plot(xs, ys, c='r', lw=3.0)
+        plt.draw()
+        return actor
 
     def debug_sampling(self, x_rand, poly, switch=True):
         if switch:
