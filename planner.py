@@ -12,7 +12,14 @@ class RRTStar(object):
         self.debug = False
         self.vertices = None  # type: Optional[List[RRTStar.StateNode]]
         self.root = None  # type: Optional[RRTStar.StateNode]
+        self.gain = None  # type: Optional[RRTStar.StateNode]
         self.x_best = None  # type: Optional[RRTStar.StateNode]
+
+        self.check_res = 0.3  # type: Optional[float]
+        self.check_poly = None  # type: Optional[np.ndarray]
+        self.exist_res = 0.1
+        self.maximum_curvature = 0.2  # type: Optional[float]
+
         self.start = None  # type: Optional[RRTStar.StateNode]
         self.goal = None  # type: Optional[RRTStar.StateNode]
         self.grid_map = None  # type: Optional[np.ndarray]
@@ -20,10 +27,6 @@ class RRTStar(object):
         self.grid_ori = None  # type: Optional[RRTStar.StateNode]
         self.obstacle = None  # type: Optional[int]
         self.heuristic = None  # type: Optional[List[(Tuple[float], Tuple[float], Tuple[float])]]
-        self.check_res = 0.3  # type: Optional[float]
-        self.check_poly = None  # type: Optional[np.ndarray]
-        self.exist_res = 0.1
-        self.maximum_curvature = 0.2  # type: Optional[float]
 
     def set_vehicle(self, check_poly, check_res, maximum_curvature):
         # type: (np.ndarray, float, float) -> RRTStar
@@ -59,7 +62,7 @@ class RRTStar(object):
         self.start.hu = self.goal.g = self.start.hl if self.collision_free(start, goal) else np.inf
         self.start.fl, self.start.fu = self.start.g + self.start.hl, self.start.g + self.start.hu
         self.goal.fl, self.goal.fu = self.goal.g + self.goal.hl, self.goal.g + self.goal.hu
-        self.root = self.start
+        self.root, self.gain = self.start, self.goal
         self.vertices, self.x_best = [self.root], self.root
         return self
 
@@ -145,7 +148,7 @@ class RRTStar(object):
         """
 
         def replenish(x_n, x_r):
-            x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.goal)
+            x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.gain)
             x_r.fl = x_r.g + x_r.hl
 
         # quick shot
@@ -160,7 +163,7 @@ class RRTStar(object):
 
     def least(self, x_rand):  # type: (StateNode) -> StateNode
         def replenish(x_n, x_r):
-            x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.goal)
+            x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.gain)
             x_r.fl = x_r.g + x_r.hl
 
         # quick shot
@@ -220,7 +223,7 @@ class RRTStar(object):
         And fill the hu and fu properties of x_new.
         """
         x_new.match(x_nearest)
-        available = self.collision_free(x_new, self.goal)
+        available = self.collision_free(x_new, self.gain)
         x_new.hu = x_new.hl if available else np.inf
         x_new.fu = x_new.g + x_new.hu
         x_new.status = 0 if available else 1
@@ -258,8 +261,8 @@ class RRTStar(object):
         x_best = self.best()
         if x_best.fu < np.inf:
             p = x_best.trace()
-            self.goal.g = self.goal.fu = x_best.fu
-            p.append(self.goal)
+            self.gain.g = self.gain.fu = x_best.fu
+            p.append(self.gain)
             return p
         else:
             x_spare = self.spare()
@@ -317,13 +320,13 @@ class RRTStar(object):
         discontinuities = []  # type: List[(Tuple[float], float)]
         segments.insert(0, tuple(self.root.state))
         reduce(extract_discontinuities, segments)
-        discontinuities.append(self.Configuration().from_state_node(self.goal))
+        discontinuities.append(self.Configuration().from_state_node(self.gain))
         discontinuities.insert(0, discontinuities.append(self.Configuration().from_state_node(self.root)))
 
         motions = []
         sectors = zip(discontinuities[:-1], discontinuities[1:])
         map(plan_motions, sectors)
-        motions.append(self.Configuration().from_state_node(self.goal))
+        motions.append(self.Configuration().from_state_node(self.gain))
         return motions
 
     class Configuration(object):
