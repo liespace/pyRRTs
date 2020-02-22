@@ -59,12 +59,13 @@ class RRTStar(object):
         self.start.hu = self.goal.g = self.start.hl if self.collision_free(start, goal) else np.inf
         self.start.fl, self.start.fu = self.start.g + self.start.hl, self.start.g + self.start.hu
         self.goal.fl, self.goal.fu = self.goal.g + self.goal.hl, self.goal.g + self.goal.hu
+        self.root = self.start
+        self.vertices, self.x_best = [self.root], self.root
         return self
 
     def planning(self, times, debug=False):
         """main flow."""
         self.debug = debug
-        self.root, self.vertices, self.x_best = self.start, [self.start], self.start
         past = time.time()
         for i in range(times):
             x_new = self.sample_free(i)
@@ -77,19 +78,21 @@ class RRTStar(object):
             Debugger().debug_planned_path(self, i, switch=self.debug)
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
         print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
-            (time.time() - past) * 1000, self.x_best.fu, self.start.hl, len(self.vertices)))
+            (time.time() - past) * 1000, self.x_best.fu, self.root.hl, len(self.vertices)))
         Debugger().save_hist()
 
     def branch_and_bound(self):
         def out(x):
             self.vertices.remove(x)
             x.remove()
+
         vs = filter(lambda x: x.fl > self.x_best.fu, self.vertices)
         map(out, vs)
         Debugger().debug_branch_and_bound(vs, switch=self.debug)
 
-    def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
+    def sample_free(self, n, default=((0., 2.0), (0., np.pi / 4.), (0, np.pi / 6.))):
         """sample a state from free configuration space."""
+
         def is_free(state):
             contours = self.contours(self.check_poly, [tuple(state)], self.grid_res, self.grid_map.shape[0])
             mask = np.zeros_like(self.grid_map, dtype=np.uint8)
@@ -103,6 +106,7 @@ class RRTStar(object):
                 dxy = np.fabs(y.state[:-1] - s[:-1])
                 da = ((y.state[-1] + np.pi) % (2 * np.pi) - np.pi) - ((s[-1] + np.pi) % (2 * np.pi) - np.pi)
                 return dxy[0] < self.exist_res and dxy[1] < self.exist_res and da < self.exist_res
+
             s = np.array(state)
             return filter(key, self.vertices)
 
@@ -139,12 +143,14 @@ class RRTStar(object):
         """find the state in the tree which is nearest to the sampled state.
         And fill the g, hl and fl properties of the sampled state.
         """
+
         def replenish(x_n, x_r):
             x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.goal)
             x_r.fl = x_r.g + x_r.hl
+
         # quick shot
-        if self.collision_free(self.start, x_rand):
-            x_nearest = self.start
+        if self.collision_free(self.root, x_rand):
+            x_nearest = self.root
         else:
             costs = list(map(lambda x: self.cost(x, x_rand), self.vertices))
             x_nearest = self.vertices[int(np.argmin(costs))]
@@ -156,9 +162,10 @@ class RRTStar(object):
         def replenish(x_n, x_r):
             x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.goal)
             x_r.fl = x_r.g + x_r.hl
+
         # quick shot
-        if self.collision_free(self.start, x_rand):
-            x_least = self.start
+        if self.collision_free(self.root, x_rand):
+            x_least = self.root
         else:
             nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
             if nodes:
@@ -179,7 +186,7 @@ class RRTStar(object):
     def collision_free(self, x_from, x_to):  # type: (StateNode, StateNode) -> bool
         """check if the path from one state to another state collides with any obstacles or not."""
         # making contours of the curve
-        states = reeds_shepp.path_sample(x_from.state, x_to.state, 1./self.maximum_curvature, 0.3)
+        states = reeds_shepp.path_sample(x_from.state, x_to.state, 1. / self.maximum_curvature, 0.3)
         # states.append(tuple(x_to.state))  # include the end point
         contours = self.contours(self.check_poly, states, self.grid_res, self.grid_map.shape[0])
         # making mask
@@ -200,6 +207,7 @@ class RRTStar(object):
             xyo = np.array([[pto[0]], [pto[1]]])
             rot = np.array([[np.cos(pto[2]), -np.sin(pto[2])], [np.sin(pto[2]), np.cos(pto[2])]])
             return np.dot(rot, pts) + xyo
+
         cons = []
         for state in states:
             con = transform(check_poly.transpose(), state).transpose()
@@ -217,10 +225,11 @@ class RRTStar(object):
         x_new.fu = x_new.g + x_new.hu
         x_new.status = 0 if available else 1
         self.vertices.append(x_new)
-        Debugger().debug_attaching(x_nearest, x_new, 1./self.maximum_curvature, switch=self.debug)
+        Debugger().debug_attaching(x_nearest, x_new, 1. / self.maximum_curvature, switch=self.debug)
 
     def rewire(self, x_new, gamma=0.2):  # type: (StateNode, float) -> None
         """rewiring tree by the new state."""
+
         def recheck(x):
             available, cost = self.collision_free(x_new, x), self.cost(x_new, x)
             if available and x.g > x_new.g + cost:
@@ -228,6 +237,7 @@ class RRTStar(object):
                 x.g = x_new.g + cost
                 x.fu, x.fl = x.g + x.hu, x.g + x.hl
                 x.rematch(x_new)
+
         xs = filter(lambda x: x.g > x_new.g + gamma, self.vertices)
         Debugger().debug_rewiring_check(xs, x_new, switch=self.debug)
         map(recheck, xs)
@@ -259,16 +269,17 @@ class RRTStar(object):
         """
         planning velocity for a path to generate a trajectory.
         """
+
         def interpolate(q_ori, segment_type, length, radius):
             x0, y0, a0 = q_ori[0], q_ori[1], q_ori[2]
             transfer = np.array([[np.cos(a0), -np.sin(a0), 0., x0], [np.sin(a0), np.cos(a0), 0., y0], [0., 0., 1., a0]])
-            sign, phi = np.sign(length), np.fabs(length)/radius
+            sign, phi = np.sign(length), np.fabs(length) / radius
             if segment_type == 1:
                 r = 2 * radius * np.sin(phi / 2.)
-                x_lcs = np.array([[r*sign*np.cos(phi/2.)], [r*np.sin(phi/2.)], [sign*phi], [1]])
+                x_lcs = np.array([[r * sign * np.cos(phi / 2.)], [r * np.sin(phi / 2.)], [sign * phi], [1]])
             elif segment_type == 3:
                 r = 2 * radius * np.sin(phi / 2.)
-                x_lcs = np.array([[r * sign * np.cos(phi / 2.)], [- r * np.sin(phi / 2.)], [- sign*phi], [1]])
+                x_lcs = np.array([[r * sign * np.cos(phi / 2.)], [- r * np.sin(phi / 2.)], [- sign * phi], [1]])
             else:
                 x_lcs = np.array([[length], [0], [0], [1]])
             x_tar = np.dot(transfer, x_lcs)
@@ -287,16 +298,16 @@ class RRTStar(object):
 
         def plan_motions(sector):
             q0, v0, q1, v1 = sector[0].state, sector[0].v, sector[1].state, sector[1].v
-            extent = reeds_shepp.path_length(q0, q1, 1./self.maximum_curvature)
-            acc = min([(v_max**2 - v1**2) / extent, a_cc])
-            vcc = np.sqrt(v1**2 + acc * extent)
-            samples = reeds_shepp.path_sample(q0, q1, 1./self.maximum_curvature, res)
+            extent = reeds_shepp.path_length(q0, q1, 1. / self.maximum_curvature)
+            acc = min([(v_max ** 2 - v1 ** 2) / extent, a_cc])
+            vcc = np.sqrt(v1 ** 2 + acc * extent)
+            samples = reeds_shepp.path_sample(q0, q1, 1. / self.maximum_curvature, res)
             for i, sample in enumerate(samples):
-                if i * res < extent/2.:
-                    vt = min([np.sqrt(v0**2 + 2*acc*(i*res)), vcc])
+                if i * res < extent / 2.:
+                    vt = min([np.sqrt(v0 ** 2 + 2 * acc * (i * res)), vcc])
                 else:
-                    vt = min([np.sqrt(v1**2 + 2*acc*(extent - i*res)), vcc])
-                motions.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4])*vt))
+                    vt = min([np.sqrt(v1 ** 2 + 2 * acc * (extent - i * res)), vcc])
+                motions.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4]) * vt))
 
         segments = []  # type: List[(float, float)]
         path = [tuple(node.state) for node in self.path]
@@ -304,10 +315,10 @@ class RRTStar(object):
         segments = zip(segments[:-1], segments[1:])  # type: List[(Tuple[float], Tuple[float])]
 
         discontinuities = []  # type: List[(Tuple[float], float)]
-        segments.insert(0, tuple(self.start.state))
+        segments.insert(0, tuple(self.root.state))
         reduce(extract_discontinuities, segments)
         discontinuities.append(self.Configuration().from_state_node(self.goal))
-        discontinuities.insert(0, discontinuities.append(self.Configuration().from_state_node(self.start)))
+        discontinuities.insert(0, discontinuities.append(self.Configuration().from_state_node(self.root)))
 
         motions = []
         sectors = zip(discontinuities[:-1], discontinuities[1:])
@@ -391,3 +402,8 @@ class RRTStar(object):
             a = self.state[2] - ao
             self.state = np.array((x, y, a))
             return self
+
+
+class BiRRTStar(RRTStar):
+    def __init__(self):
+        super(BiRRTStar, self).__init__()

@@ -90,7 +90,7 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq, debug = './test_scenes', 0, True
+    filepath, seq, debug = './test_scenes', 0, False
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
     heuristic = read_ose(filepath, seq)
     source, target = read_task(filepath, seq)
