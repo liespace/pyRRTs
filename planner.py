@@ -69,7 +69,7 @@ class RRTStar(object):
         for i in range(times):
             x_new = self.sample_free(i)
             x_nearest = self.nearest(x_new)
-            if self.benefit(x_new) and self.collision_free(x_nearest, x_new):
+            if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
             self.x_best = self.best()
@@ -77,22 +77,6 @@ class RRTStar(object):
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
         print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
             (time.time() - past) * 1000, self.x_best.fu, self.start.hl, len(self.vertices)))
-        Debugger().save_hist()
-
-    def optimizing(self, times, debug=False):
-        self.debug = debug
-        self.root, self.vertices = self.start, [self.start]
-        past = time.time()
-        for i in range(times):
-            x_new = self.sample_free(i)
-            x_least = self.least(x_new)
-            if x_least:
-                self.attach(x_least, x_new)
-                self.rewire(x_new)
-            self.x_best = self.best()
-            Debugger().debug_planned_path(self, i, switch=self.debug)
-            Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
-        print('Runtime: {} ms, Length: {}/ {}'.format((time.time() - past) * 1000, self.x_best.fu, self.start.hl))
         Debugger().save_hist()
 
     def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
