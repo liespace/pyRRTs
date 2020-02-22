@@ -242,7 +242,7 @@ class RRTStar(object):
         return sorted(self.vertices, key=lambda x: x.fu)[0]
 
     def spare(self):
-        return sorted(self.vertices, key=lambda x: x.fl)[0]
+        return sorted(self.vertices, key=lambda x: x.hl)[0]
 
     @property
     def path(self):  # type: () -> List[RRTStar.StateNode]
