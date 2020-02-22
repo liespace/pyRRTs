@@ -90,9 +90,9 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq, debug = './test_scenes', 0, False
+    filepath, seq, debug = './test_scenes', 0, True
     rrt_star = RRTStar().set_vehicle(contour(), 0.3, 0.25)
-    heuristic = read_yips(filepath, seq)
+    heuristic = read_ose(filepath, seq)
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
@@ -111,9 +111,7 @@ def main():
         Debugger.plot_heuristic(heuristic)
         plt.draw()
 
-    rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic)
-
-    rrt_star.planning(100, debug=debug)
+    rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic).planning(100, debug=debug)
 
     Debugger.breaker('Plotting', switch=debug)
 

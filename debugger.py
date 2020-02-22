@@ -7,6 +7,13 @@ from matplotlib.patches import Ellipse, Wedge, Polygon
 class Debugger(object):
     plan_hist = []
 
+    def debug_branch_and_bound(self, vs, switch=True):
+        if switch:
+            actor = self.plot_nodes(vs, color='r')
+            raw_input('trimming: {}'.format(len(vs)))
+            self.remove(actor)
+            self.plot_nodes(vs, color='k')
+
     def debug_nearest_searching(self, state, switch=True):
         if switch:
             actor = self.plot_state(state, color='r')
@@ -29,19 +36,13 @@ class Debugger(object):
                 p[-1].fu, planner.start.hl, no, len(planner.vertices)))
             self.remove(actor)
 
-    def debug_sample_emerging(self, x_rand, poly, switch=True):
+    def debug_sampling(self, x_rand, poly, switch=True):
         if switch:
             actor_state = Debugger.plot_state(x_rand)
             actor_poly = Debugger.plot_polygon(self.transform(poly, x_rand))
             raw_input('sample emerged')
             self.remove(actor_poly)
             self.remove(actor_state)
-
-    def debug_sampling(self, state, switch=True):
-        if switch:
-            actor = self.plot_state(state)
-            raw_input('new node')
-            # self.remove(actor)
 
     def debug_collision_checking(self, states, poly, result, switch=True):
         if switch:
@@ -52,6 +53,7 @@ class Debugger(object):
 
     def debug_attaching(self, x_nearest, x_new, rho, switch=True):
         if switch:
+            self.plot_state(x_new.state)
             self.plot_curve(x_nearest, x_new, rho)
             raw_input('added new node ({}, {}, {}, {}, {})'.format(x_new.g, x_new.hl, x_new.fl, x_new.hu, x_new.fu))
 

@@ -73,11 +73,20 @@ class RRTStar(object):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
             self.x_best = self.best()
+            self.branch_and_bound()
             Debugger().debug_planned_path(self, i, switch=self.debug)
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
         print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
             (time.time() - past) * 1000, self.x_best.fu, self.start.hl, len(self.vertices)))
         Debugger().save_hist()
+
+    def branch_and_bound(self):
+        def out(x):
+            self.vertices.remove(x)
+            x.remove()
+        vs = filter(lambda x: x.fl > self.x_best.fu, self.vertices)
+        map(out, vs)
+        Debugger().debug_branch_and_bound(vs, switch=self.debug)
 
     def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
         """sample a state from free configuration space."""
@@ -119,10 +128,9 @@ class RRTStar(object):
 
         while True:
             x_rand = emerge()
-            Debugger().debug_sample_emerging(x_rand, self.check_poly, switch=self.debug)
+            Debugger().debug_sampling(x_rand, self.check_poly, switch=self.debug)
             if is_free(x_rand):
                 if not exist(x_rand):
-                    Debugger().debug_sampling(x_rand, switch=self.debug)
                     return self.StateNode(tuple(x_rand))
                 Debugger.breaker('sample existed', switch=self.debug)
             Debugger.breaker('sample collided', switch=self.debug)
@@ -340,9 +348,15 @@ class RRTStar(object):
             self.parent = x_parent
             x_parent.children.append(self)
 
+        def remove(self):
+            if self.parent:
+                self.parent.children.remove(self)
+                self.parent = None
+
         def rematch(self, x_new_parent):
-            self.parent.children.remove(self)
-            self.match(x_new_parent)
+            if self.parent:
+                self.parent.children.remove(self)
+                self.match(x_new_parent)
 
         def trace(self):  # type: ()->List[RRTStar.StateNode]
             p, ptr = [self], self.parent
