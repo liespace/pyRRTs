@@ -64,18 +64,19 @@ class RRTStar(object):
     def planning(self, times, debug=False):
         """main flow."""
         self.debug = debug
-        self.root, self.vertices = self.start, [self.start]
+        self.root, self.vertices, self.x_best = self.start, [self.start], self.start
         past = time.time()
         for i in range(times):
             x_new = self.sample_free(i)
             x_nearest = self.nearest(x_new)
-            if self.collision_free(x_nearest, x_new):
+            if self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
             self.x_best = self.best()
             Debugger().debug_planned_path(self, i, switch=self.debug)
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
-        print('Runtime: {} ms, Length: {}/ {}'.format((time.time() - past) * 1000, self.x_best.fu, self.start.hl))
+        print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
+            (time.time() - past) * 1000, self.x_best.fu, self.start.hl, len(self.vertices)))
         Debugger().save_hist()
 
     def optimizing(self, times, debug=False):
@@ -177,6 +178,11 @@ class RRTStar(object):
             replenish(x_least, x_rand)
             Debugger().debug_nearest_searching(x_least.state, switch=self.debug)
         return x_least
+
+    def benefit(self, x_new):
+        words = 'Benefit: {}/ ({}, {})'.format(x_new.fl <= self.x_best.fu, x_new.fl, self.x_best.fu)
+        Debugger.breaker(words, switch=self.debug)
+        return x_new.fl < self.x_best.fu
 
     def collision_free(self, x_from, x_to):  # type: (StateNode, StateNode) -> bool
         """check if the path from one state to another state collides with any obstacles or not."""

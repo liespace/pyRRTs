@@ -16,7 +16,7 @@ class Debugger(object):
     def debug_planning_hist(self, planner, no, runtime, switch=True):
         if switch:
             p = planner.path
-            self.plan_hist.append((no, runtime, p[-1].fu if p[-1].fu < np.inf else 0))
+            self.plan_hist.append((no, runtime, p[-1].fu if p[-1].fu < np.inf else 0, len(planner.vertices)))
 
     def save_hist(self):
         np.savetxt('plan_hist.csv', self.plan_hist, delimiter=',')
@@ -25,7 +25,8 @@ class Debugger(object):
         if switch:
             p = planner.path
             actor = self.plot_nodes(p, 'r')
-            raw_input('Planned Path {}/ {}, Times {}'.format(p[-1].fu, planner.start.hl, no))
+            raw_input('Planned Path {}/ {}, Times {}, Vertex {}'.format(
+                p[-1].fu, planner.start.hl, no, len(planner.vertices)))
             self.remove(actor)
 
     def debug_sample_emerging(self, x_rand, poly, switch=True):
