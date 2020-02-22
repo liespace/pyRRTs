@@ -12,6 +12,7 @@ class RRTStar(object):
         self.debug = False
         self.vertices = None  # type: Optional[List[RRTStar.StateNode]]
         self.root = None  # type: Optional[RRTStar.StateNode]
+        self.x_best = None  # type: Optional[RRTStar.StateNode]
         self.start = None  # type: Optional[RRTStar.StateNode]
         self.goal = None  # type: Optional[RRTStar.StateNode]
         self.grid_map = None  # type: Optional[np.ndarray]
@@ -53,8 +54,11 @@ class RRTStar(object):
         self.grid_map, self.grid_res, self.grid_ori, self.obstacle = grid_map, grid_res, grid_ori, obstacle
         self.heuristic = heuristic
         self.start, self.goal = start, goal
-        self.start.g = self.goal.h = 0
-        self.start.h = self.goal.g = self.cost(start, goal) if self.collision_free(start, goal) else 0
+        self.start.g = self.goal.hl = self.goal.hu = 0
+        self.start.hl = self.cost(start, goal)
+        self.start.hu = self.goal.g = self.start.hl if self.collision_free(start, goal) else np.inf
+        self.start.fl, self.start.fu = self.start.g + self.start.hl, self.start.g + self.start.hu
+        self.goal.fl, self.goal.fu = self.goal.g + self.goal.hl, self.goal.g + self.goal.hu
         return self
 
     def planning(self, times, debug=False):
@@ -68,9 +72,10 @@ class RRTStar(object):
             if self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
-            Debugger().debug_planned_path(self.path, i, switch=self.debug)
-            Debugger().debug_planning_hist(self.path, i, (time.time() - past) * 1000, switch=True)
-        print('Runtime: {} ms, Length: {}'.format((time.time() - past) * 1000, self.path[-1].fu))
+            self.x_best = self.best()
+            Debugger().debug_planned_path(self, i, switch=self.debug)
+            Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
+        print('Runtime: {} ms, Length: {}/ {}'.format((time.time() - past) * 1000, self.x_best.fu, self.start.hl))
         Debugger().save_hist()
 
     def optimizing(self, times, debug=False):
@@ -83,9 +88,10 @@ class RRTStar(object):
             if x_least:
                 self.attach(x_least, x_new)
                 self.rewire(x_new)
-            Debugger().debug_planned_path(self.path, i, switch=self.debug)
-            Debugger().debug_planning_hist(self.path, i, (time.time() - past) * 1000, switch=True)
-        print('Runtime: {} ms, Length: {}'.format((time.time() - past) * 1000, self.path[-1].fu))
+            self.x_best = self.best()
+            Debugger().debug_planned_path(self, i, switch=self.debug)
+            Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
+        print('Runtime: {} ms, Length: {}/ {}'.format((time.time() - past) * 1000, self.x_best.fu, self.start.hl))
         Debugger().save_hist()
 
     def sample_free(self, n, default=((0., 2.0), (0., np.pi/4.), (0, np.pi/6.))):
@@ -137,32 +143,40 @@ class RRTStar(object):
             Debugger.breaker('sample collided', switch=self.debug)
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
-        """find the state in the tree which is nearest to the sampled state."""
+        """find the state in the tree which is nearest to the sampled state.
+        And fill the g, hl and fl properties of the sampled state.
+        """
+        def replenish(x_n, x_r):
+            x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.goal)
+            x_r.fl = x_r.g + x_r.hl
         # quick shot
         if self.collision_free(self.start, x_rand):
-            x_rand.g = self.cost(self.start, x_rand)
-            Debugger().debug_nearest_searching(self.start.state, switch=self.debug)
-            return self.start
-        costs = list(map(lambda x: self.cost(x, x_rand), self.vertices))
-        x_nearest, min_cost = self.vertices[int(np.argmin(costs))], np.min(costs)
-        x_rand.g = x_nearest.g + min_cost
+            x_nearest = self.start
+        else:
+            costs = list(map(lambda x: self.cost(x, x_rand), self.vertices))
+            x_nearest = self.vertices[int(np.argmin(costs))]
+        replenish(x_nearest, x_rand)
         Debugger().debug_nearest_searching(x_nearest.state, switch=self.debug)
         return x_nearest
 
     def least(self, x_rand):  # type: (StateNode) -> StateNode
+        def replenish(x_n, x_r):
+            x_r.g, x_r.hl = x_n.g + self.cost(x_n, x_r), self.cost(x_r, self.goal)
+            x_r.fl = x_r.g + x_r.hl
         # quick shot
         if self.collision_free(self.start, x_rand):
-            x_rand.g = self.cost(self.start, x_rand)
-            Debugger().debug_nearest_searching(self.start.state, switch=self.debug)
-            return self.start
-        nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
-        if nodes:
-            costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
-            x_least, min_cost = nodes[int(np.argmin(costs))], np.min(costs)
-            x_rand.g = min_cost
+            x_least = self.start
+        else:
+            nodes = filter(lambda x: self.collision_free(x, x_rand), self.vertices)
+            if nodes:
+                costs = list(map(lambda x: x.g + self.cost(x, x_rand), nodes))
+                x_least = nodes[int(np.argmin(costs))]
+            else:
+                x_least = None
+        if x_least:
+            replenish(x_least, x_rand)
             Debugger().debug_nearest_searching(x_least.state, switch=self.debug)
-            return x_least
-        return None
+        return x_least
 
     def collision_free(self, x_from, x_to):  # type: (StateNode, StateNode) -> bool
         """check if the path from one state to another state collides with any obstacles or not."""
@@ -196,11 +210,13 @@ class RRTStar(object):
         return cons
 
     def attach(self, x_nearest, x_new):  # type: (StateNode, StateNode) -> None
-        """add the new state to the tree and complement other values."""
+        """add the new state to the tree and complement other values.
+        And fill the hu and fu properties of x_new.
+        """
         x_new.match(x_nearest)
-        available, cost = self.collision_free(x_new, self.goal), self.cost(x_new, self.goal)
-        (x_new.hu, x_new.hl) = (cost, cost) if available else (np.inf, cost)
-        x_new.fu, x_new.fl = x_new.g + x_new.hu, x_new.g + x_new.hl
+        available = self.collision_free(x_new, self.goal)
+        x_new.hu = x_new.hl if available else np.inf
+        x_new.fu = x_new.g + x_new.hu
         x_new.status = 0 if available else 1
         self.vertices.append(x_new)
         Debugger().debug_attaching(x_nearest, x_new, 1./self.maximum_curvature, switch=self.debug)
@@ -222,18 +238,24 @@ class RRTStar(object):
         """calculate the cost from one state to another state"""
         return reeds_shepp.path_length(x_from.state, x_to.state, 1. / self.maximum_curvature)
 
+    def best(self):
+        return sorted(self.vertices, key=lambda x: x.fu)[0]
+
+    def spare(self):
+        return sorted(self.vertices, key=lambda x: x.fl)[0]
+
     @property
     def path(self):  # type: () -> List[RRTStar.StateNode]
         """extract the planning result. including the goal state if the the goal is available"""
-        self.vertices.sort(key=lambda x: x.fu)
-        if self.vertices[0].fu < np.inf:
-            p = self.vertices[0].trace()
-            self.goal.g = self.goal.fu = self.vertices[0].fu
+        x_best = self.best()
+        if x_best.fu < np.inf:
+            p = x_best.trace()
+            self.goal.g = self.goal.fu = x_best.fu
             p.append(self.goal)
             return p
         else:
-            self.vertices.sort(key=lambda x: x.fl)
-            return self.vertices[0].trace()
+            x_spare = self.spare()
+            return x_spare.trace()
 
     def trajectory(self, a_cc=3, v_max=20, res=0.5):
         """

@@ -13,17 +13,19 @@ class Debugger(object):
             raw_input('nearest node')
             self.remove(actor)
 
-    def debug_planning_hist(self, path, no, runtime, switch=True):
+    def debug_planning_hist(self, planner, no, runtime, switch=True):
         if switch:
-            self.plan_hist.append((no, runtime, path[-1].fu if path[-1].fu < np.inf else 0))
+            p = planner.path
+            self.plan_hist.append((no, runtime, p[-1].fu if p[-1].fu < np.inf else 0))
 
     def save_hist(self):
         np.savetxt('plan_hist.csv', self.plan_hist, delimiter=',')
 
-    def debug_planned_path(self, path, no, switch=True):
+    def debug_planned_path(self, planner, no, switch=True):
         if switch:
-            actor = self.plot_nodes(path, 'r')
-            raw_input('Planned Path {}, Times {}'.format(path[-1].fu, no))
+            p = planner.path
+            actor = self.plot_nodes(p, 'r')
+            raw_input('Planned Path {}/ {}, Times {}'.format(p[-1].fu, planner.start.hl, no))
             self.remove(actor)
 
     def debug_sample_emerging(self, x_rand, poly, switch=True):
@@ -38,7 +40,7 @@ class Debugger(object):
         if switch:
             actor = self.plot_state(state)
             raw_input('new node')
-            self.remove(actor)
+            # self.remove(actor)
 
     def debug_collision_checking(self, states, poly, result, switch=True):
         if switch:
@@ -50,7 +52,7 @@ class Debugger(object):
     def debug_attaching(self, x_nearest, x_new, rho, switch=True):
         if switch:
             self.plot_curve(x_nearest, x_new, rho)
-            raw_input('added new node ({}, {}, {})'.format(x_new.g, x_new.hu, x_new.fu))
+            raw_input('added new node ({}, {}, {}, {}, {})'.format(x_new.g, x_new.hl, x_new.fl, x_new.hu, x_new.fu))
 
     def debug_rewiring_check(self, xs, x_new, switch=True):
         if switch:
