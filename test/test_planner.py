@@ -1,15 +1,11 @@
 #!/usr/bin/env python
-from typing import Any
 from copy import deepcopy
-import os
-import time
-import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image
-from planner import RRTStar, BiRRTStar
-from debugger import Debugger
+import cv2
 from matplotlib.patches import Polygon
+from rrts.planner import RRTStar, BiRRTStar
+from rrts.debugger import Debugger
 
 
 def center2rear(node, wheelbase=2.96):
@@ -52,7 +48,7 @@ def read_task(filepath, seq=0):
 def read_grid(filepath, seq):
     # type: (str, int) -> np.ndarray
     """read occupancy grid map"""
-    return np.array(Image.open('{}/{}_gridmap.png'.format(filepath, seq)))
+    return cv2.imread(filename='{}/{}_gridmap.png'.format(filepath, seq), flags=-1)
 
 
 def read_ose(filepath, seq):
@@ -90,11 +86,11 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq, debug = './test_scenes', 85, False
+    filepath, seq, debug = './test_scenes', 0, False
     rrt_star = BiRRTStar().set_vehicle(contour(), 0.3, 0.25)
     # heuristic = read_ose(filepath, seq)
-    # heuristic = read_yips(filepath, seq)
-    heuristic = None
+    heuristic = read_yips(filepath, seq)
+    # heuristic = None
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
