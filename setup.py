@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='rrts',
-    version='1.0.2',
+    version='1.0.3',
     packages=setuptools.find_packages(),
     description='RRTs Planners',
     long_description=long_description,
@@ -19,7 +19,7 @@ setuptools.setup(
         'numba',
         'reeds_shepp',
         'matplotlib',
-        'cv2',
+        'opencv-python',
         'scipy'],
     classifiers=[
         "Programming Language :: Python :: 2",
