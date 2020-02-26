@@ -1,28 +1,28 @@
-import os
-from distutils.core import setup
-from setuptools import find_packages
+import setuptools
 
+with open("README.md", "r") as fh:
+    long_description = fh.read()
 
-def read(filename):
-    path = os.path.join(os.path.dirname(__file__), filename)
-    contents = open(path).read()
-    return contents
-
-
-setup(name='rrts',
-      version='1.0.0',
-      packages=find_packages(where='./'),
-      description='RRTs Planners',
-      long_description=read('README.rst'),
-      author='Gabel Liemann',
-      author_email='troubleli233@gmail.com',
-      url='https://github.com/liespace/pyRRTs',
-      license='MIT',
-      install_requires=[
-          'numpy',
-          'numba',
-          'reeds_shepp',
-          'matplotlib',
-          'cv2',
-          'scipy']
-      )
+setuptools.setup(
+    name='rrts',
+    version='1.0.2',
+    packages=setuptools.find_packages(),
+    description='RRTs Planners',
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    author='Gabel Liemann',
+    author_email='troubleli233@gmail.com',
+    url='https://github.com/liespace/pyRRTs',
+    license='MIT',
+    install_requires=[
+        'numpy',
+        'numba',
+        'reeds_shepp',
+        'matplotlib',
+        'cv2',
+        'scipy'],
+    classifiers=[
+        "Programming Language :: Python :: 2",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent"],
+)
