@@ -32,8 +32,8 @@ class Debugger(object):
             self.plan_hist.append(
                 (no, runtime, planner.x_best.fu if planner.x_best.fu < np.inf else 0, len(planner.vertices)))
 
-    def save_hist(self):
-        np.savetxt('plan_hist.csv', self.plan_hist, delimiter=',')
+    def save_hist(self, filepath='plan_hist.csv'):
+        np.savetxt(filepath, self.plan_hist, delimiter=',')
 
     def debug_planned_path(self, planner, no, switch=True):
         if switch:

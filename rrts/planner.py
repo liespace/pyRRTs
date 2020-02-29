@@ -1,5 +1,6 @@
 from typing import List, Tuple, Optional, Any
 import time
+import logging
 import numba
 import numpy as np
 import cv2
@@ -64,12 +65,12 @@ class RRTStar(object):
         self.vertices, self.x_best = [self.root], self.root
         return self
 
-    def planning(self, times, debug=False):
+    def planning(self, times, repeat=10, debug=False):
         """main flow."""
         self.debug = debug
         past = time.time()
         for i in range(times):
-            x_new = self.sample_free(i)
+            x_new = self.sample_free(i, repeat)
             x_nearest = self.nearest(x_new)
             if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
@@ -78,9 +79,6 @@ class RRTStar(object):
                 self.branch_and_bound()
             Debugger().debug_planned_path(self, i, switch=self.debug)
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
-        print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
-            (time.time() - past) * 1000, self.x_best.fu, self.root.hl, len(self.vertices)))
-        Debugger().save_hist()
 
     def branch_and_bound(self, space=None):
         def out(x):
@@ -91,7 +89,7 @@ class RRTStar(object):
         map(out, vs)
         Debugger().debug_branch_and_bound(vs, switch=self.debug)
 
-    def sample_free(self, n, default=((2., .5), (0., np.pi / 4.), (0, np.pi / 6.))):
+    def sample_free(self, n, repeat=10, default=((2., .5), (0., np.pi / 4.), (0, np.pi / 6.))):
         """sample a state from free configuration space."""
 
         def is_free(state):
@@ -134,12 +132,13 @@ class RRTStar(object):
                 return rand
 
         vertex = np.random.choice(self.vertices)
-        while True:
+        for i in range(repeat):
             x_rand = emerge()
             Debugger().debug_sampling(x_rand, self.check_poly, switch=self.debug)
             if is_free(x_rand):
                 if not exist(x_rand):
                     return self.StateNode(tuple(x_rand))
+        return self.StateNode(tuple(x_rand))
 
     def nearest(self, x_rand):  # type: (StateNode) -> StateNode
         """find the state in the tree which is nearest to the sampled state.
@@ -439,13 +438,13 @@ class BiRRTStar(RRTStar):
             Debugger.breaker('swap: start -> goal, {}, {}'.format(i, n), self.debug)
             return n
 
-    def planning(self, times, debug=False):
+    def planning(self, times, repeat=10, debug=False):
         """main flow."""
         self.debug = debug
         past = time.time()
         for i in range(times):
             n = self.swap(i)
-            x_new = self.sample_free(n)
+            x_new = self.sample_free(n, repeat)
             x_nearest = self.nearest(x_new)
             if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
@@ -454,9 +453,6 @@ class BiRRTStar(RRTStar):
                 self.connect_graphs(x_new)
             Debugger().debug_planned_path(self, i, switch=self.debug)
             Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
-        Debugger().save_hist()
-        print('Runtime: {} ms, Length: {}/ {}, Vertex: {}'.format(
-            (time.time() - past) * 1000, self.x_best.fu, self.root.hl, len(self.vertices)))
 
     def best_of_all(self):
         x_new_best = self.best()

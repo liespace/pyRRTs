@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name='rrts',
-    version='1.0.3',
+    version='1.0.4',
     packages=setuptools.find_packages(),
     description='RRTs Planners',
     long_description=long_description,
