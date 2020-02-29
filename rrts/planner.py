@@ -78,7 +78,7 @@ class RRTStar(object):
                 self.x_best = self.best()
                 self.branch_and_bound()
             Debugger().debug_planned_path(self, i, switch=self.debug)
-            Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
+            Debugger().debug_planning_hist(self, i, (time.time() - past), switch=True)
 
     def branch_and_bound(self, space=None):
         def out(x):
@@ -452,7 +452,7 @@ class BiRRTStar(RRTStar):
                 self.x_best = self.best_of_all()
                 self.connect_graphs(x_new)
             Debugger().debug_planned_path(self, i, switch=self.debug)
-            Debugger().debug_planning_hist(self, i, (time.time() - past) * 1000, switch=True)
+            Debugger().debug_planning_hist(self, i, (time.time() - past), switch=True)
 
     def best_of_all(self):
         x_new_best = self.best()
