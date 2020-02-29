@@ -165,7 +165,7 @@ class Debugger(object):
         for index in indexes:
             uv = np.array([index[0], index[1], 1])
             xy = np.dot(np.linalg.inv(xy2uv), uv)
-            rect = plt.Rectangle((xy[0] - grid_res, xy[1] - grid_res), grid_res, grid_res, color=(1.0, 0.1, 0.1))
+            rect = plt.Rectangle((xy[0] - grid_res/2., xy[1] - grid_res/2.), grid_res, grid_res, color=(1.0, 0.1, 0.1))
             plt.gca().add_patch(rect)
         plt.draw()
 

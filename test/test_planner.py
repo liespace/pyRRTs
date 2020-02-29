@@ -21,12 +21,12 @@ def center2rear(node, wheelbase=2.96):
     return node
 
 
-def contour(wheelbase=2.96):
+def contour(wheelbase=2.96, width=2.0, length=5.0):  # 2.96, 2.2, 5.0
     return np.array([
-        [-(2.5 - wheelbase/2.), 1.1 - 1.0], [-(2.5 - wheelbase/2. - 0.4), 1.1],
-        [2.5 + wheelbase/2. - 0.6, 1.1], [2.5 + wheelbase/2., 1.1 - 0.8],
-        [2.5 + wheelbase/2., -(1.1 - 0.8)], [2.5 + wheelbase/2. - 0.6, -1.1],
-        [-(2.5 - wheelbase/2. - 0.4), -1.1], [-(2.5 - wheelbase/2.), -(1.1 - 1.0)]])
+        [-(length/2. - wheelbase / 2.), width/2. - 1.0], [-(length/2. - wheelbase / 2. - 0.4), width/2.],
+        [length/2. + wheelbase / 2. - 0.6, width/2.], [length/2. + wheelbase / 2., width/2. - 0.8],
+        [length/2. + wheelbase / 2., -(width/2. - 0.8)], [length/2. + wheelbase / 2. - 0.6, -width/2.],
+        [-(length/2. - wheelbase / 2. - 0.4), -width/2.], [-(length/2. - wheelbase / 2.), -(width/2. - 1.0)]])
 
 
 def read_task(filepath, seq=0):
@@ -86,11 +86,11 @@ def transform(pts, pto):
 
 
 def main():
-    filepath, seq, debug = './test_scenes', 0, False
+    filepath, seq, debug = './test_scenes', 2062, True
     rrt_star = BiRRTStar().set_vehicle(contour(), 0.3, 0.25)
     # heuristic = read_ose(filepath, seq)
-    heuristic = read_yips(filepath, seq)
-    # heuristic = None
+    # heuristic = read_yips(filepath, seq)
+    heuristic = None
     source, target = read_task(filepath, seq)
     start = center2rear(deepcopy(source)).gcs2lcs(source.state)
     goal = center2rear(deepcopy(target)).gcs2lcs(source.state)
@@ -109,7 +109,7 @@ def main():
         if heuristic:
             Debugger.plot_heuristic(heuristic)
         plt.draw()
-
+    rrt_star.debug = debug
     rrt_star.preset(start, goal, grid_map, grid_res, grid_ori, 255, heuristic).planning(100, debug=debug)
 
     Debugger.breaker('Plotting', switch=debug)
