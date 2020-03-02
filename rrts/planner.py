@@ -66,13 +66,13 @@ class RRTStar(object):
         self.vertices, self.x_best = [self.root], self.root
         return self
 
-    def planning(self, times, repeat=10, debug=False):
+    def planning(self, times, repeat=10, optimize=False, debug=False):
         """main flow."""
         self.debug = debug
         past = time.time()
         for i in range(times):
             x_new = self.sample_free(i, repeat)
-            x_nearest = self.nearest(x_new)
+            x_nearest = self.nearest(x_new) if not optimize else self.least(x_new)
             if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
@@ -439,14 +439,14 @@ class BiRRTStar(RRTStar):
             Debugger.breaker('swap: start -> goal, {}, {}'.format(i, n), self.debug)
             return n
 
-    def planning(self, times, repeat=10, debug=False):
+    def planning(self, times, repeat=10, optimize=False, debug=False):
         """main flow."""
         self.debug = debug
         past = time.time()
         for i in range(times):
             n = self.swap(i)
             x_new = self.sample_free(n, repeat)
-            x_nearest = self.nearest(x_new)
+            x_nearest = self.nearest(x_new) if not optimize else self.least(x_new)
             if x_nearest and self.benefit(x_new) and self.collision_free(x_nearest, x_new):
                 self.attach(x_nearest, x_new)
                 self.rewire(x_new)
