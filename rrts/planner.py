@@ -15,6 +15,7 @@ class RRTStar(object):
         self.root = None  # type: Optional[RRTStar.StateNode]
         self.gain = None  # type: Optional[RRTStar.StateNode]
         self.x_best = None  # type: Optional[RRTStar.StateNode]
+        self.epsilon = 1e-6
 
         self.check_res = 0.3  # type: Optional[float]
         self.check_poly = None  # type: Optional[np.ndarray]
@@ -85,7 +86,7 @@ class RRTStar(object):
             vertices.remove(x)
             x.remove()
         vertices = space if space else self.vertices
-        vs = filter(lambda x: x.fl > self.x_best.fu, vertices)
+        vs = filter(lambda x: x.fl > self.x_best.fu + self.epsilon, vertices)
         map(out, vs)
         Debugger().debug_branch_and_bound(vs, switch=self.debug)
 
