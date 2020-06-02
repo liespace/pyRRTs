@@ -257,7 +257,7 @@ class RRTStar(object):
             x_spare = self.spare()
             return x_spare.trace()
 
-    def trajectory(self, a_cc=3, v_max=20, res=0.5):
+    def trajectory(self, a_cc=4, v_max=10, res=0.1):
         """
         planning velocity for a path to generate a trajectory.
         """
@@ -285,37 +285,60 @@ class RRTStar(object):
             sg0, sg1 = sgs[0], sgs[1]
             q1 = interpolate(q0, sg0[0], sg0[1], 1. / self.maximum_curvature)
             if sg0[1] * sg1[1] < 0:
-                discontinuities.append(self.Configuration(q1, v=0))
+                discontinuities2.append(self.Configuration(q1, v=0))
+            else:
+                discontinuities2.append(self.Configuration(q1))
             return q1
 
-        def plan_motions(sector):
-            q0, v0, q1, v1 = sector[0].state, sector[0].v, sector[1].state, sector[1].v
-            extent = reeds_shepp.path_length(q0, q1, 1. / self.maximum_curvature)
+        def plan_motions(index_sec):
+            motion = []
+            v0, v1 = 0, 0
+            seg = discontinuities2[index_sec[0]:index_sec[1]+1]
+            seg = list(zip(seg[:-1], seg[1:]))
+            extent = 0
+            for sec in seg:
+                s0, s1 = sec[0].state, sec[1].state
+                extent += np.abs(reeds_shepp.path_length(s0, s1, 1. / self.maximum_curvature))
+            samples = []
+            for sec in seg:
+                s0, s1 = sec[0].state, sec[1].state
+                samples.extend(reeds_shepp.path_sample(s0, s1, 1. / self.maximum_curvature, res))
+
+            print(extent)
+            print(len(samples))
+
             acc = min([(v_max ** 2 - v1 ** 2) / extent, a_cc])
             vcc = np.sqrt(v1 ** 2 + acc * extent)
-            samples = reeds_shepp.path_sample(q0, q1, 1. / self.maximum_curvature, res)
             for i, sample in enumerate(samples):
                 if i * res < extent / 2.:
                     vt = min([np.sqrt(v0 ** 2 + 2 * acc * (i * res)), vcc])
                 else:
-                    vt = min([np.sqrt(v1 ** 2 + 2 * acc * (extent - i * res)), vcc])
-                motions.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4]) * vt))
+                    vt = min([np.sqrt(v1 ** 2 + 2 * acc * np.abs(extent - i * res)), vcc])
+                motion.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4]) * vt))
+            print([m.v for m in motion])
+            return motion
 
         segments = []  # type: List[(float, float)]
         path = [tuple(node.state) for node in self.path()]
         reduce(extract_segments, path)
-        segments = zip(segments[:-1], segments[1:])  # type: List[(Tuple[float], Tuple[float])]
+        segments = list(zip(segments[:-1], segments[1:]))  # type: List[(Tuple[float], Tuple[float])]
 
-        discontinuities = []  # type: List[(Tuple[float], float)]
+        discontinuities2 = []  # type: List[(Tuple[float], float)]
         segments.insert(0, tuple(self.root.state))
         reduce(extract_discontinuities, segments)
-        discontinuities.append(self.Configuration().from_state_node(self.gain))
-        discontinuities.insert(0, discontinuities.append(self.Configuration().from_state_node(self.root)))
+
+        discontinuities2.append(self.Configuration().from_state_node(self.gain))
+        discontinuities2.insert(0, self.Configuration().from_state_node(self.root))
+        discontinuity_indexes = []
+        for j, dis in enumerate(discontinuities2):
+            if dis.v == 0:
+                discontinuity_indexes.append(j)
 
         motions = []
-        sectors = zip(discontinuities[:-1], discontinuities[1:])
-        map(plan_motions, sectors)
-        motions.append(self.Configuration().from_state_node(self.gain))
+        sector_indexes = list(zip(discontinuity_indexes[:-1], discontinuity_indexes[1:]))
+        for sector_index in sector_indexes:
+            motions.extend(plan_motions(sector_index))
+        motions.append(self.Configuration(state=self.gain.state, v=self.gain.v, k=motions[-1].k))
         return motions
 
     class Configuration(object):
