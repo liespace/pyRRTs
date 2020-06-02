@@ -462,7 +462,7 @@ class BiRRTStar(RRTStar):
             Debugger.breaker('swap: start -> goal, {}, {}'.format(i, n), self.debug)
             return n
 
-    def planning(self, times, repeat=10, optimize=False, debug=False):
+    def planning(self, times, repeat=10, optimize=True, debug=False):
         """main flow."""
         self.debug = debug
         past = time.time()
