@@ -4,7 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from matplotlib.patches import Polygon
-from rrts.planner import RRTStar, BiRRTStar
+from rrts import BiRRTStar, RRTStar
 from rrts.debugger import Debugger
 
 

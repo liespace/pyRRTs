@@ -3,8 +3,7 @@ from copy import deepcopy
 import time
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from planner import RRTStar
+from rrts import RRTStar
 import reeds_shepp
 
 

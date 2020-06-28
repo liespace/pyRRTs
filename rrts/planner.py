@@ -1,11 +1,10 @@
 from typing import List, Tuple, Optional, Any
 import time
-import logging
 import numba
 import numpy as np
 import cv2
 import reeds_shepp
-from debugger import Debugger
+from .debugger import Debugger
 
 
 class RRTStar(object):
@@ -304,9 +303,6 @@ class RRTStar(object):
                 s0, s1 = sec[0].state, sec[1].state
                 samples.extend(reeds_shepp.path_sample(s0, s1, 1. / self.maximum_curvature, res))
 
-            print(extent)
-            print(len(samples))
-
             acc = min([(v_max ** 2 - v1 ** 2) / extent, a_cc])
             vcc = np.sqrt(v1 ** 2 + acc * extent)
             for i, sample in enumerate(samples):
@@ -315,7 +311,6 @@ class RRTStar(object):
                 else:
                     vt = min([np.sqrt(v1 ** 2 + 2 * acc * np.abs(extent - i * res)), vcc])
                 motion.append(self.Configuration(sample[:3], k=sample[3], v=np.sign(sample[4]) * vt))
-            print([m.v for m in motion])
             return motion
 
         segments = []  # type: List[(float, float)]
